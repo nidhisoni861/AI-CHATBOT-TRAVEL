@@ -1,6 +1,7 @@
 "use client";
-import { create } from "zustand";
+import create from "zustand";
 import type { Chat, Message } from "@/src/features/chatbot/types/chat.types";
+import type { StateCreator } from "zustand";
 
 export type ChatState = {
   chats: Chat[];
@@ -72,4 +73,4 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   reset: () => set({ chats: [], activeChatId: undefined, typing: false }),
-}));
+} as any));
