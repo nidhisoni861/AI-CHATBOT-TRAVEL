@@ -2,7 +2,7 @@ import { TravelDashboard } from "@/src/features/chatbot/components/TravelDashboa
 
 export const metadata = {
   title: "Chat - WanderAI",
-  description: "Chat interface",
+  description: "Chat with WanderAI",
 };
 
 export default function ChatPage() {
