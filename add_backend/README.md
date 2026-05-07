@@ -1,4 +1,4 @@
-# Wanderly Model Backend
+﻿# Wanderly Model Backend
 
 FastAPI serving layer for the base and fine-tuned travel models.
 
@@ -13,7 +13,7 @@ cd backend_fine_tuning
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cd ..
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 WSL/Linux:
@@ -23,7 +23,7 @@ cd "/mnt/c/Users/naman/OneDrive/Desktop/SRH_NOTES/Applied AI/AI-CHATBOT-TRAVEL/b
 source .venv-linux/bin/activate
 pip install -r requirements.txt
 cd ..
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 By default, startup preloads the fine-tuned model once. To disable preload and lazy-load on the first request:
@@ -32,13 +32,13 @@ PowerShell:
 
 ```powershell
 $env:BACKEND_PRELOAD_MODEL="none"
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 WSL/Linux:
 
 ```bash
-BACKEND_PRELOAD_MODEL=none python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+BACKEND_PRELOAD_MODEL=none python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Endpoints
@@ -65,3 +65,4 @@ Production/frontend use should prefer `POST /chat`. `POST /api/model/test` is fo
   }
 }
 ```
+

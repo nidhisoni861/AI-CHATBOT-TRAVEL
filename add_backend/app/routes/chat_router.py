@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import ValidationError
 
-from backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
-from backend.app.services.ai_model_service import generate_travel_response
+from add_backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
+from add_backend.app.services.ai_model_service import generate_travel_response
 
 
 router = APIRouter(tags=["chat"])
@@ -56,3 +56,4 @@ async def chat_post(request: Request) -> ChatResponse:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
     return generate_travel_response(chat_request)
+

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import gc
 import json
@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
+from add_backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
 
 
 logger = logging.getLogger("wanderly.model")
@@ -144,3 +144,4 @@ def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
         f"USER_MESSAGE: {message}\n\n"
         f"API_CONTEXT: {json.dumps(api_context, ensure_ascii=False)}"
     )
+

@@ -1,8 +1,8 @@
-# Wanderly Backend Runtime
+﻿# Wanderly Backend Runtime
 
 This folder contains the runtime configuration and compatibility entrypoint for the local model backend demo.
 
-The actual FastAPI implementation lives in `../backend/app`. The fine-tuning training scripts, proof outputs, datasets, and one-off test scripts were archived under:
+The actual FastAPI implementation lives in `../add_backend/app`. The fine-tuning training scripts, proof outputs, datasets, and one-off test scripts were archived under:
 
 ```text
 extra_app/backend_fine_tuning_demo_archive/
@@ -12,16 +12,16 @@ extra_app/backend_fine_tuning_demo_archive/
 
 ```text
 backend_fine_tuning/
-├── app/
-│   └── main.py                  # compatibility entrypoint for uvicorn app.main:app
-├── fine_tuning/
-│   └── scripts/
-│       ├── adapter_loader.py     # base model and LoRA adapter loading
-│       └── json_guardrail.py     # JSON repair and dashboard normalization
-├── .env                          # local only, ignored
-├── .env.example                  # teammate-safe config template
-├── README.md
-└── requirements.txt
+|-- app/
+|   `-- main.py                  # compatibility entrypoint for uvicorn app.main:app
+|-- fine_tuning/
+|   `-- scripts/
+|       |-- adapter_loader.py     # base model and LoRA adapter loading
+|       `-- json_guardrail.py     # JSON repair and dashboard normalization
+|-- .env                          # local only, ignored
+|-- .env.example                  # teammate-safe config template
+|-- README.md
+`-- requirements.txt
 ```
 
 ## Run
@@ -63,3 +63,4 @@ Frontend integration should use `POST /chat`.
 - `model_variant: "base"` unloads the fine-tuned variant and loads the base model only.
 
 Only one model variant is kept in memory at a time for local laptop safety.
+

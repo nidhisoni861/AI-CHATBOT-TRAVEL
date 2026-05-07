@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
@@ -7,9 +7,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.routes.chat_router import router as chat_router
-from backend.app.routes.model_test_router import router as model_test_router
-from backend.app.services.ai_model_service import preload_model, unload_models
+from add_backend.app.routes.chat_router import router as chat_router
+from add_backend.app.routes.model_test_router import router as model_test_router
+from add_backend.app.services.ai_model_service import preload_model, unload_models
 
 
 def _load_backend_env() -> None:
@@ -60,3 +60,4 @@ app.include_router(model_test_router, prefix="/api")
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
