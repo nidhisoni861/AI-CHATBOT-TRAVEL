@@ -1,0 +1,7 @@
+torch
+transformers
+accelerate
+peft
+huggingface_hub
+python-dotenv
+safetensors
