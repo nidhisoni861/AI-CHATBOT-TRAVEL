@@ -5,3 +5,6 @@ peft
 huggingface_hub
 python-dotenv
 safetensors
+fastapi
+uvicorn[standard]
+pydantic

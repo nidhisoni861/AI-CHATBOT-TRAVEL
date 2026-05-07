@@ -1,37 +1,65 @@
-# Fine-Tuning Backend
+# Wanderly Backend Runtime
 
-This branch stores the fine-tuning dataset, training script, adapter tests, JSON validation, base-vs-adapter comparison, and optional merge/export script. It does not contain serving code.
+This folder contains the runtime configuration and compatibility entrypoint for the local model backend demo.
 
-Model checkpoints and final merged models belong on Hugging Face or ignored local folders, not in GitHub.
+The actual FastAPI implementation lives in `../backend/app`. The fine-tuning training scripts, proof outputs, datasets, and one-off test scripts were archived under:
 
-## Structure
+```text
+extra_app/backend_fine_tuning_demo_archive/
+```
+
+## Active Runtime Files
 
 ```text
 backend_fine_tuning/
+├── app/
+│   └── main.py                  # compatibility entrypoint for uvicorn app.main:app
 ├── fine_tuning/
-│   ├── configs/model_config.example.env
-│   ├── data/processed/train.jsonl
-│   ├── data/processed/validation.jsonl
-│   ├── outputs/.gitkeep
-│   ├── scripts/adapter_loader.py
-│   ├── scripts/compare_base_vs_adapter.py
-│   ├── scripts/merge_and_push.py
-│   ├── scripts/test_adapter.py
-│   ├── scripts/test_json_schema.py
-│   └── scripts/train_unsloth.py
-├── .env.example
+│   └── scripts/
+│       ├── adapter_loader.py     # base model and LoRA adapter loading
+│       └── json_guardrail.py     # JSON repair and dashboard normalization
+├── .env                          # local only, ignored
+├── .env.example                  # teammate-safe config template
 ├── README.md
 └── requirements.txt
 ```
 
-## Local Test Flow
+## Run
 
-1. Finish Kaggle training.
-2. Identify the latest complete checkpoint.
-3. Set `ADAPTER_REPO_ID` and `ADAPTER_SUBFOLDER`, or set `LOCAL_ADAPTER_PATH`.
-4. Run `python test_adapter.py`.
-5. Run `python test_json_schema.py --input ../outputs/<generated-output>.json` if validating a saved generation.
-6. Run `python compare_base_vs_adapter.py`.
-7. Run `python merge_and_push.py` only when you need a standalone merged model.
+WSL/Linux:
 
-PEFT loads the adapter from the folder containing `adapter_config.json` and `adapter_model.safetensors`; do not point code directly at the `.safetensors` file.
+```bash
+cd "/mnt/c/Users/naman/OneDrive/Desktop/SRH_NOTES/Applied AI/AI-CHATBOT-TRAVEL/backend_fine_tuning"
+source .venv-linux/bin/activate
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Windows PowerShell:
+
+```powershell
+cd "C:\Users\naman\OneDrive\Desktop\SRH_NOTES\Applied AI\AI-CHATBOT-TRAVEL\backend_fine_tuning"
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+By default, startup preloads the fine-tuned model once. To disable preload and lazy-load on first request:
+
+```bash
+BACKEND_PRELOAD_MODEL=none python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+## Endpoints
+
+- `GET /health`
+- `GET /models`
+- `POST /chat`
+- `POST /api/model/test`
+
+Frontend integration should use `POST /chat`.
+
+## Model Switching
+
+- `model_variant: "fine_tuned"` loads the base model and attaches the LoRA adapter from the local checkpoint folder.
+- `model_variant: "base"` unloads the fine-tuned variant and loads the base model only.
+
+Only one model variant is kept in memory at a time for local laptop safety.
