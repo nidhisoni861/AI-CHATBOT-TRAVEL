@@ -1,10 +1,10 @@
 import type { DashboardCopy, SupportedLanguage } from "../types/dashboard.types";
 
 export const defaultDashboardCopy: DashboardCopy = {
-  eyebrow: "Assistant controlled workspace",
-  title: "AI generated global travel planning console",
-  body: "The assistant can plan any destination worldwide and updates itinerary, route, translation, budget, bookings, and saved trip widgets from one conversation.",
-  sync: "Map synced with assistant",
+    eyebrow: "Assistant-Controlled Workspace",
+  title: "AI Travel Assistant",
+  sync: "",
+  body: ""
 };
 
 export const dashboardCopyByLanguage: Record<SupportedLanguage, DashboardCopy> = {

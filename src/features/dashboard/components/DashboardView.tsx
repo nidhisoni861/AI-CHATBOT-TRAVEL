@@ -7,8 +7,6 @@ import { PremiumMap } from "../../maps/components/PremiumMap";
 import { FloatingAssistant } from "../../travel/components/FloatingAssistant";
 import { LiveTranslation } from "../../translator/components/LiveTranslation";
 
-import { DashboardStats } from "./DashboardStats";
-
 import {
   dashboardCopyByLanguage,
   defaultDashboardCopy,
@@ -24,7 +22,7 @@ import {
   type SavedTrip,
 } from "../../travel/components/SavedTripsWidget";
 import { TravelInsights } from "../../travel/components/TravelInsights";
-import { TravelOperations } from "../../travel/components/TravelOperations";
+// import { TravelOperations } from "../../travel/components/TravelOperations";
 
 import type { DashboardPayload } from "../../../lib/api";
 import { normalizeItinerary } from "../../../lib/api";
@@ -42,6 +40,7 @@ export default function DashboardView() {
   const [assistantOpen, setAssistantOpen] = useState(true);
   const [pageLanguage, setPageLanguage] =
     useState<SupportedLanguage>("English");
+
   const [activeStopId, setActiveStopId] = useState(1);
   const [, setBudget] = useState(1500);
   const [bookingPrices, setBookingPrices] = useState(initialBookingPrices);
@@ -144,7 +143,7 @@ export default function DashboardView() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-[#eef3fb] text-slate-950">
+    <div className="flex min-h-screen flex-col bg-[#eef3fb] text-slate-950 lg:flex-row">
       <LeftSidebar
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
@@ -153,82 +152,85 @@ export default function DashboardView() {
       />
 
       <main className="flex-1 overflow-y-auto lg:h-screen">
-        <div
-          className={`mx-auto max-w-[1660px] space-y-6 p-6 ${
-            assistantOpen ? "2xl:pr-[500px]" : ""
-          }`}
-        >
-          <section ref={overviewRef}>
-            <div className="mb-5 flex items-end justify-between gap-4">
-              <div>
-                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.85)]" />
-                  {copy.eyebrow}
-                </div>
-
-                <h1 className="text-3xl font-bold tracking-tight text-slate-950">
-                  {copy.title}
-                </h1>
-
-                <p className="mt-1 text-sm text-slate-600">{copy.body}</p>
+        <div className="mx-auto w-full max-w-[1840px] px-6 py-6 2xl:px-8">
+          {/* HEADER */}
+          <section ref={overviewRef} className="scroll-mt-6">
+            <div className="mx-auto mb-8 flex max-w-4xl flex-col items-center justify-center text-center">
+              <div className="mb-3 inline-flex items-center justify-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-blue-700 shadow-sm">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.85)]" />
+                {copy.eyebrow}
               </div>
 
-              <div className="rounded-full border border-blue-200 bg-white/80 px-4 py-2 text-xs font-semibold text-blue-700 shadow-sm">
-                {copy.sync}
-              </div>
+              <h1 className="mx-auto max-w-4xl text-center text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">
+                {copy.title}
+              </h1>
+
+              <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-7 text-slate-600 sm:text-base">
+                {copy.body}
+              </p>
             </div>
-
-            <DashboardStats />
           </section>
 
+          {/* CLEAN 3-COLUMN GRID */}
           <section
             ref={tripPlannerRef}
-            className="grid scroll-mt-6 grid-cols-12 gap-6"
+            className="grid scroll-mt-6 items-start gap-6 xl:grid-cols-[minmax(330px,0.95fr)_minmax(470px,1.18fr)_minmax(360px,0.95fr)]"
           >
-            <div ref={mapRouteRef} className="col-span-12 grid gap-6 xl:col-span-7">
-              <PremiumMap
-                activeStopId={activeStopId}
-                onStopFocus={setActiveStopId}
-                liveStops={liveTripData?.itinerary}
-              />
+            {/* LEFT COLUMN */}
 
-              <TravelOperations bookingPrices={bookingPrices} />
+            <div className="min-w-0 space-y-6">
+              <div ref={translationRef} className="scroll-mt-6">
+                <LiveTranslation />
+              </div>  
+              <div ref={mapRouteRef} className="scroll-mt-6">
+                <PremiumMap
+                  activeStopId={activeStopId}
+                  onStopFocus={setActiveStopId}
+                  liveStops={liveTripData?.itinerary}
+                />
+              </div>
+
+              {/* <TravelOperations bookingPrices={bookingPrices} /> */}
+
+              
             </div>
 
-            <div className="col-span-12 xl:col-span-5">
+            {/* CENTER COLUMN */}
+            <div className="min-w-0 space-y-6">
               <RefinedItinerary
                 activeStopId={activeStopId}
                 onStopChange={setActiveStopId}
                 liveStops={liveTripData?.itinerary}
                 tripSummary={liveTripData?.trip_summary}
               />
-            </div>
-          </section>
 
-          <section
-            ref={translationRef}
-            className="grid scroll-mt-6 grid-cols-12 gap-6 pb-8"
-          >
-            <div className="col-span-12 self-start xl:col-span-6">
-              <LiveTranslation />
+
+              
+              
             </div>
 
-            <div ref={savedTripsRef} className="col-span-12 grid gap-6 xl:col-span-6">
-              <SavedTripsWidget liveTrips={liveTrips} />
+            {/* RIGHT COLUMN - ONLY STICKY ASSISTANT */}
+            <div className=" h-6 min-w-0 space-y-6 scroll-mt-6">
+              <FloatingAssistant
+                docked
+                isOpen={assistantOpen}
+                onToggle={() => setAssistantOpen((prev) => !prev)}
+                onSetBudget={setBudget}
+                onOptimizePrices={() => setBookingPrices(optimizedBookingPrices)}
+                onFocusStop={setActiveStopId}
+                onDashboardUpdate={handleDashboardUpdate}
+              />
+              <div ref={savedTripsRef} className="scroll-mt-6">
+                <SavedTripsWidget liveTrips={liveTrips} />
+              </div>
               <TravelInsights />
+              
             </div>
+            
           </section>
+          
         </div>
       </main>
-
-      <FloatingAssistant
-        isOpen={assistantOpen}
-        onToggle={() => setAssistantOpen((prev) => !prev)}
-        onSetBudget={setBudget}
-        onOptimizePrices={() => setBookingPrices(optimizedBookingPrices)}
-        onFocusStop={setActiveStopId}
-        onDashboardUpdate={handleDashboardUpdate}
-      />
     </div>
   );
 }

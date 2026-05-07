@@ -55,43 +55,7 @@ export function LeftSidebar({ activeSection, onSectionChange, pageLanguage, onLa
         })}
       </nav>
 
-      <div className="space-y-3 border-t border-white/10 p-4">
-        <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-300">Model Connected</span>
-            <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,.9)]" />
-          </div>
-          <div className="text-sm font-semibold">Fine-Tuned Travel Model</div>
-        </div>
-
-        <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-400">Current Trip</div>
-              <div className="text-sm font-semibold">Paris, France</div>
-            </div>
-            <Map className="h-4 w-4 text-blue-300" />
-          </div>
-          <div className="mb-2 text-xs text-slate-400">Apr 30 - May 5, 2026</div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-            <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-blue-400 to-emerald-300" />
-          </div>
-          <div className="mt-2 flex justify-between text-xs text-slate-400">
-            <span>3 / 6 days</span>
-            <span>Itinerary synced</span>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button onClick={() => setSettingsOpen(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 transition-colors hover:bg-white/10">
-            <Settings className="h-4 w-4 text-slate-400" />
-            <span className="text-sm text-slate-300">Settings</span>
-          </button>
-          <button className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] transition-colors hover:bg-white/10">
-            <ChevronLeft className="h-4 w-4 text-slate-400" />
-          </button>
-        </div>
-      </div>
+      
 
       {settingsOpen && (
         <div className="absolute bottom-20 left-4 right-4 z-50 rounded-2xl border border-white/10 bg-slate-950 p-4 shadow-2xl">

@@ -39,3 +39,32 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+
+# <section
+#   ref={tripPlannerRef}
+#   className="grid scroll-mt-6 grid-cols-12 gap-6"
+# >
+#   <div
+#     ref={mapRouteRef}
+#     className="col-span-12 grid gap-6 xl:col-span-6"
+#   >
+#     <PremiumMap
+#       activeStopId={activeStopId}
+#       onStopFocus={setActiveStopId}
+#       liveStops={liveTripData?.itinerary}
+#     />
+
+#     <TravelOperations bookingPrices={bookingPrices} />
+#   </div>
+
+#   <div className="col-span-12 xl:col-span-6">
+#     <RefinedItinerary
+#       activeStopId={activeStopId}
+#       onStopChange={setActiveStopId}
+#       liveStops={liveTripData?.itinerary}
+#       tripSummary={liveTripData?.trip_summary}
+#     />
+#   </div>
+# </section>
