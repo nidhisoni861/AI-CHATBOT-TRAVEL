@@ -11,6 +11,7 @@ from adapter_loader import AdapterConfig, _adapter_kwargs, adapter_source, print
 def main() -> None:
     config = AdapterConfig.from_env()
     merged_model_repo_id = os.getenv("MERGED_MODEL_REPO_ID", "Naman-1718/wanderly-llama32-3b-merged")
+    push_token = os.getenv("HF_WRITE_TOKEN") or config.hf_token
     local_output_dir = Path(os.getenv("MERGED_MODEL_LOCAL_DIR", "merged_model")).resolve()
 
     print_config(config)
@@ -52,9 +53,9 @@ def main() -> None:
     merged_model.save_pretrained(local_output_dir, safe_serialization=True)
     tokenizer.save_pretrained(local_output_dir)
 
-    create_repo(merged_model_repo_id, token=config.hf_token, private=False, exist_ok=True)
-    merged_model.push_to_hub(merged_model_repo_id, token=config.hf_token, safe_serialization=True)
-    tokenizer.push_to_hub(merged_model_repo_id, token=config.hf_token)
+    create_repo(merged_model_repo_id, token=push_token, private=False, exist_ok=True)
+    merged_model.push_to_hub(merged_model_repo_id, token=push_token, safe_serialization=True)
+    tokenizer.push_to_hub(merged_model_repo_id, token=push_token)
 
     print(f"\nMerged model pushed to: {merged_model_repo_id}")
     print("Keep this repo ID for the serving/backend deployment branch.")

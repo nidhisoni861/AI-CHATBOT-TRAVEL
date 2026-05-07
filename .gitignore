@@ -37,10 +37,10 @@ __pycache__/
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
-!/backend/.env.example
-!/backend/fine_tuning/configs/model_config.example.env
-/backend/.env
-/backend/fine_tuning/scripts/__pycache__/
+!/backend_fine_tuning/.env.example
+!/backend_fine_tuning/fine_tuning/configs/model_config.example.env
+/backend_fine_tuning/.env
+/backend_fine_tuning/fine_tuning/scripts/__pycache__/
 
 # vercel
 .vercel
@@ -54,11 +54,11 @@ next-env.d.ts
 /new_backend/
 
 # fine-tuning outputs and model artifacts
-/backend/fine_tuning/outputs/*
-!/backend/fine_tuning/outputs/.gitkeep
-/backend/fine_tuning/scripts/merged_model/
-/backend/merged_model/
-/backend/fine_tuning/checkpoints/
+/backend_fine_tuning/fine_tuning/outputs/*
+!/backend_fine_tuning/fine_tuning/outputs/.gitkeep
+/backend_fine_tuning/fine_tuning/scripts/merged_model/
+/backend_fine_tuning/merged_model/
+/backend_fine_tuning/fine_tuning/checkpoints/
 checkpoint-*/
 *.safetensors
 *.pt

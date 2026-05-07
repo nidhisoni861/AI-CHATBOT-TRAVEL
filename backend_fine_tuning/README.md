@@ -7,7 +7,7 @@ Model checkpoints and final merged models belong on Hugging Face or ignored loca
 ## Structure
 
 ```text
-backend/
+backend_fine_tuning/
 ├── fine_tuning/
 │   ├── configs/model_config.example.env
 │   ├── data/processed/train.jsonl
