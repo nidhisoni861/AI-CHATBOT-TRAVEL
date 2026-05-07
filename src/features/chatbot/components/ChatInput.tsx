@@ -1,6 +1,5 @@
 "use client";
 import React, { useState } from "react";
-import { Send } from "lucide-react";
 import { useChat } from "@/src/features/chatbot/hooks/useChat";
 import { sendMessageToApi } from "@/src/features/chatbot/services/chatService";
 import { suggestedPrompts } from "@/src/features/chatbot/data/suggestedPrompts";
@@ -48,7 +47,10 @@ export default function ChatInput() {
             }}
           />
           <button onClick={onSend} className="p-2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-            <Send size={16} />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M22 2L11 13" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M22 2l-7 20-4-9-9-4 20-7z" />
+            </svg>
           </button>
         </div>
 

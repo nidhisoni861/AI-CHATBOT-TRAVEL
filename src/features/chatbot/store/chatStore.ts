@@ -19,21 +19,21 @@ function makeId() {
   return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set: any, get: any) => ({
   chats: [],
   activeChatId: undefined,
   typing: false,
 
-  createChat: (title) => {
+  createChat: (title?: string) => {
     const id = makeId();
     const chat: Chat = { id, title: title ?? "New chat", messages: [], createdAt: new Date().toISOString() };
-    set((s) => ({ chats: [chat, ...s.chats], activeChatId: id }));
+    set((s: ChatState) => ({ chats: [chat, ...s.chats], activeChatId: id }));
     return id;
   },
 
-  setActive: (id) => set({ activeChatId: id }),
+  setActive: (id: string) => set({ activeChatId: id }),
 
-  addMessage: (chatId, message) => {
+  addMessage: (chatId: string, message: { role: "user" | "bot"; text: string }) => {
     const msg: Message = {
       id: makeId(),
       role: message.role,
@@ -41,7 +41,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
-    set((s) => {
+    set((s: ChatState) => {
       const chats = s.chats.map((c) => {
         if (c.id === chatId) return { ...c, messages: [...c.messages, msg] };
         return c;
@@ -57,16 +57,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return msg;
   },
 
-  setTyping: (t) => set({ typing: t }),
+  setTyping: (t: boolean) => set({ typing: t }),
 
-  ensureActiveChat: (title) => {
+  ensureActiveChat: (title?: string) => {
     const { activeChatId, createChat } = get();
     if (activeChatId) return activeChatId;
     return createChat(title);
   },
 
-  updateChatTitle: (chatId, title) => {
-    set((s) => ({
+  updateChatTitle: (chatId: string, title: string) => {
+    set((s: ChatState) => ({
       chats: s.chats.map((c) => (c.id === chatId ? { ...c, title: c.title && c.title !== "New chat" ? c.title : title } : c)),
     }));
   },

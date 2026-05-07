@@ -1,8 +1,8 @@
 "use client";
 import React, { useState } from "react";
-import { Menu } from "lucide-react";
 import { useChat } from "@/src/features/chatbot/hooks/useChat";
 import NewChatButton from "@/src/features/chatbot/components/NewChatButton";
+import type { Chat } from "@/src/features/chatbot/types/chat.types";
 
 export default function ChatSidebar() {
   const { chats, activeChatId, setActive, createChat } = useChat();
@@ -17,7 +17,20 @@ export default function ChatSidebar() {
           onClick={() => setMobileOpen((v) => !v)}
           className="p-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          <Menu size={18} />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
+          </svg>
         </button>
         <div className="text-sm font-medium">AI Travel</div>
         <NewChatButton onClick={() => createChat("Quick chat")} />
@@ -36,7 +49,7 @@ export default function ChatSidebar() {
 
         <div className="overflow-auto flex-1">
           <ul>
-            {chats.map((c) => (
+            {chats.map((c: Chat) => (
               <li
                 key={c.id}
                 onClick={() => {
@@ -47,8 +60,12 @@ export default function ChatSidebar() {
                   c.id === activeChatId ? "bg-zinc-100 dark:bg-zinc-900" : ""
                 }`}
               >
-                <div className="font-medium text-sm truncate">{c.title ?? "Untitled"}</div>
-                <div className="text-xs text-zinc-500">{c.messages.length} messages</div>
+                <div className="font-medium text-sm truncate">
+                  {c.title ?? "Untitled"}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {c.messages.length} messages
+                </div>
               </li>
             ))}
           </ul>
