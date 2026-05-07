@@ -1,8 +1,8 @@
 "use client";
-import create from "zustand";
+import { create } from "zustand";
 import type { Chat, Message } from "@/src/features/chatbot/types/chat.types";
 
-type ChatState = {
+export type ChatState = {
   chats: Chat[];
   activeChatId?: string;
   typing: boolean;
@@ -19,7 +19,7 @@ function makeId() {
   return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
-export const useChatStore = create<ChatState>((set: any, get: any) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: undefined,
   typing: false,
@@ -42,12 +42,12 @@ export const useChatStore = create<ChatState>((set: any, get: any) => ({
     };
 
     set((s: ChatState) => {
-      const chats = s.chats.map((c) => {
+      const chats = s.chats.map((c: Chat) => {
         if (c.id === chatId) return { ...c, messages: [...c.messages, msg] };
         return c;
       });
 
-      if (!chats.find((c) => c.id === chatId)) {
+      if (!chats.find((c: Chat) => c.id === chatId)) {
         const newChat: Chat = { id: chatId, title: "New chat", messages: [msg], createdAt: new Date().toISOString() };
         return { chats: [newChat, ...s.chats] };
       }
@@ -67,7 +67,7 @@ export const useChatStore = create<ChatState>((set: any, get: any) => ({
 
   updateChatTitle: (chatId: string, title: string) => {
     set((s: ChatState) => ({
-      chats: s.chats.map((c) => (c.id === chatId ? { ...c, title: c.title && c.title !== "New chat" ? c.title : title } : c)),
+      chats: s.chats.map((c: Chat) => (c.id === chatId ? { ...c, title: c.title && c.title !== "New chat" ? c.title : title } : c)),
     }));
   },
 
