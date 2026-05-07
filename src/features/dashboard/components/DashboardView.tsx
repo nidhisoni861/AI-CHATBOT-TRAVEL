@@ -144,12 +144,12 @@ export default function DashboardView() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#eef3fb] text-slate-950 lg:flex-row">
-      <LeftSidebar
+      {/* <LeftSidebar
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
         pageLanguage={pageLanguage}
         onLanguageChange={handleLanguageChange}
-      />
+      /> */}
 
       <main className="flex-1 overflow-y-auto lg:h-screen">
         <div className="mx-auto w-full max-w-[1840px] px-6 py-6 2xl:px-8">
@@ -180,7 +180,7 @@ export default function DashboardView() {
 
             <div className="min-w-0 space-y-6">
               <div ref={translationRef} className="scroll-mt-6">
-                <LiveTranslation />
+                {/* <LiveTranslation /> */}
               </div>  
               <div ref={mapRouteRef} className="scroll-mt-6">
                 <PremiumMap
@@ -197,20 +197,6 @@ export default function DashboardView() {
 
             {/* CENTER COLUMN */}
             <div className="min-w-0 space-y-6">
-              <RefinedItinerary
-                activeStopId={activeStopId}
-                onStopChange={setActiveStopId}
-                liveStops={liveTripData?.itinerary}
-                tripSummary={liveTripData?.trip_summary}
-              />
-
-
-              
-              
-            </div>
-
-            {/* RIGHT COLUMN - ONLY STICKY ASSISTANT */}
-            <div className=" h-6 min-w-0 space-y-6 scroll-mt-6">
               <FloatingAssistant
                 docked
                 isOpen={assistantOpen}
@@ -220,10 +206,25 @@ export default function DashboardView() {
                 onFocusStop={setActiveStopId}
                 onDashboardUpdate={handleDashboardUpdate}
               />
+             
+
+
+              
+              
+            </div>
+
+            {/* RIGHT COLUMN - ONLY STICKY ASSISTANT */}
+            <div className=" h-50 min-w-5 space-y-6 scroll-mt-6">
+               {/* <RefinedItinerary
+                activeStopId={activeStopId}
+                onStopChange={setActiveStopId}
+                liveStops={liveTripData?.itinerary}
+                tripSummary={liveTripData?.trip_summary}
+              /> */}
               <div ref={savedTripsRef} className="scroll-mt-6">
                 <SavedTripsWidget liveTrips={liveTrips} />
               </div>
-              <TravelInsights />
+              {/* <TravelInsights /> */}
               
             </div>
             
