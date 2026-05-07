@@ -1,0 +1,75 @@
+"use client";
+import create from "zustand";
+import type { Chat, Message } from "@/src/features/chatbot/types/chat.types";
+
+type ChatState = {
+  chats: Chat[];
+  activeChatId?: string;
+  typing: boolean;
+  createChat: (title?: string) => string;
+  setActive: (id: string) => void;
+  addMessage: (chatId: string, message: { role: "user" | "bot"; text: string }) => Message;
+  setTyping: (t: boolean) => void;
+  ensureActiveChat: (title?: string) => string;
+  updateChatTitle: (chatId: string, title: string) => void;
+  reset: () => void;
+};
+
+function makeId() {
+  return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  chats: [],
+  activeChatId: undefined,
+  typing: false,
+
+  createChat: (title) => {
+    const id = makeId();
+    const chat: Chat = { id, title: title ?? "New chat", messages: [], createdAt: new Date().toISOString() };
+    set((s) => ({ chats: [chat, ...s.chats], activeChatId: id }));
+    return id;
+  },
+
+  setActive: (id) => set({ activeChatId: id }),
+
+  addMessage: (chatId, message) => {
+    const msg: Message = {
+      id: makeId(),
+      role: message.role,
+      text: message.text,
+      createdAt: new Date().toISOString(),
+    };
+
+    set((s) => {
+      const chats = s.chats.map((c) => {
+        if (c.id === chatId) return { ...c, messages: [...c.messages, msg] };
+        return c;
+      });
+
+      if (!chats.find((c) => c.id === chatId)) {
+        const newChat: Chat = { id: chatId, title: "New chat", messages: [msg], createdAt: new Date().toISOString() };
+        return { chats: [newChat, ...s.chats] };
+      }
+      return { chats };
+    });
+
+    return msg;
+  },
+
+  setTyping: (t) => set({ typing: t }),
+
+  ensureActiveChat: (title) => {
+    const { activeChatId, createChat } = get();
+    if (activeChatId) return activeChatId;
+    return createChat(title);
+  },
+
+  updateChatTitle: (chatId, title) => {
+    set((s) => ({
+      chats: s.chats.map((c) => (c.id === chatId ? { ...c, title: c.title && c.title !== "New chat" ? c.title : title } : c)),
+    }));
+  },
+
+  reset: () => set({ chats: [], activeChatId: undefined, typing: false }),
+}));
