@@ -1,10 +1,10 @@
-import { ChatLayout } from "@/src/features/chatbot/components/ChatLayout";
+import { TravelDashboard } from "@/src/features/chatbot/components/TravelDashboard";
 
 export const metadata = {
-  title: "AI Chatbot Travel",
-  description: "Futuristic travel chatbot",
+  title: "WanderAI Dashboard",
+  description: "Modern AI travel assistant dashboard",
 };
 
 export default function Page() {
-  return <ChatLayout />;
+  return <TravelDashboard />;
 }
