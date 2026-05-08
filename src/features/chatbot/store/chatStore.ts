@@ -1,5 +1,5 @@
 "use client";
-import { create } from "zustand";
+import create from "zustand";
 import type { Chat, Message } from "@/src/features/chatbot/types/chat.types";
 
 export type ChatState = {
@@ -19,7 +19,7 @@ function makeId() {
   return `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
-export const useChatStore = create<ChatState>()((set, get) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: undefined,
   typing: false,
