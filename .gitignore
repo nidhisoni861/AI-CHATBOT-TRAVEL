@@ -85,3 +85,17 @@ checkpoint-*/
 *.pt
 *.pth
 *.bin
+
+# Optional backend evaluation scripts
+/backend_fine_tuning/fine_tuning/scripts/_test_guardrail_rules.py
+/backend_fine_tuning/fine_tuning/scripts/create_10_train_questions.py
+/backend_fine_tuning/fine_tuning/scripts/run_10_backend_comparison.py
+/backend_fine_tuning/fine_tuning/scripts/run_7_question_model_switch_test.py
+/backend_fine_tuning/fine_tuning/scripts/run_quality_check_2_prompts.py
+
+# Optional backend evaluation scripts
+/backend_fine_tuning/fine_tuning/scripts/_test_guardrail_rules.py
+/backend_fine_tuning/fine_tuning/scripts/create_10_train_questions.py
+/backend_fine_tuning/fine_tuning/scripts/run_10_backend_comparison.py
+/backend_fine_tuning/fine_tuning/scripts/run_7_question_model_switch_test.py
+/backend_fine_tuning/fine_tuning/scripts/run_quality_check_2_prompts.py

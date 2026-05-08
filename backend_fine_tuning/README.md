@@ -11,7 +11,7 @@ add_backend/app/
 This folder keeps the model configuration, Python environment, and compatibility entrypoint so teammates can run the backend on port `9000`:
 
 ```bash
-./start_backend_wsl.sh
+./backend_fine_tuning/start_backend_wsl.sh
 ```
 
 ## What This Backend Does
@@ -158,8 +158,7 @@ Expected result: no syntax errors.
 WSL/Linux recommended:
 
 ```bash
-cd backend_fine_tuning
-./start_backend_wsl.sh
+./backend_fine_tuning/start_backend_wsl.sh
 ```
 
 The script creates `.venv-linux` if needed, installs `requirements.txt`, loads `backend_fine_tuning/.env`, and starts:
@@ -183,7 +182,7 @@ By default, startup preloads the fine-tuned model once. To skip preload and lazy
 WSL/Linux:
 
 ```bash
-BACKEND_PRELOAD_MODEL=none ./start_backend_wsl.sh
+BACKEND_PRELOAD_MODEL=none ./backend_fine_tuning/start_backend_wsl.sh
 ```
 
 Windows PowerShell:
@@ -210,6 +209,125 @@ http://127.0.0.1:9000/api/model/test
 
 Model list:
 http://127.0.0.1:9000/models
+```
+
+## API Endpoints
+
+### `GET /health`
+
+Checks whether the FastAPI process is running.
+
+```bash
+curl http://127.0.0.1:9000/health
+```
+
+Response:
+
+```json
+{"status":"ok"}
+```
+
+### `GET /models`
+
+Returns the available model variants and the default model.
+
+```bash
+curl http://127.0.0.1:9000/models
+```
+
+Response:
+
+```json
+{
+  "models": [
+    {"id": "base", "label": "Base Llama 3.2 3B"},
+    {"id": "fine_tuned", "label": "Fine-tuned Wanderly LoRA"}
+  ],
+  "default": "fine_tuned"
+}
+```
+
+### `GET /chat`
+
+Simple browser/query-string chat endpoint. This is useful for quick manual checks.
+
+Query parameters:
+
+```text
+message       required string
+model_variant optional, "base" or "fine_tuned", default "fine_tuned"
+session_id    optional, default "demo-user-1"
+```
+
+Example:
+
+```bash
+curl "http://127.0.0.1:9000/chat?message=Plan%20a%201-day%20trip%20to%20Heidelberg&model_variant=fine_tuned&session_id=demo-user-1"
+```
+
+### `POST /chat`
+
+Main frontend chat endpoint. Use this from the Next.js app or API clients.
+
+```bash
+curl -X POST http://127.0.0.1:9000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "demo-user-1",
+    "message": "Plan a 3-day budget trip from Stuttgart to Ljubljana for a student under 350 EUR.",
+    "model_variant": "fine_tuned",
+    "api_context": {
+      "flights": [],
+      "hotels": [],
+      "weather": null,
+      "local_events": []
+    }
+  }'
+```
+
+### `POST /api/model/test`
+
+Manual model test endpoint. It accepts the same request body as `POST /chat`, but is namespaced under `/api` for backend testing.
+
+```bash
+curl -X POST http://127.0.0.1:9000/api/model/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "manual-test-1",
+    "message": "Create a 1-day Heidelberg plan without inventing live API data.",
+    "model_variant": "fine_tuned",
+    "include_raw_model_output": false,
+    "api_context": {
+      "flights": [],
+      "hotels": [],
+      "weather": null,
+      "local_events": []
+    }
+  }'
+```
+
+Common request fields:
+
+```text
+session_id               string, optional
+message                  string, required
+model_variant            "base" or "fine_tuned", optional
+max_new_tokens           integer, optional
+include_raw_model_output boolean, optional
+api_context              object, optional
+```
+
+Common response fields:
+
+```text
+session_id
+selected_model
+adapter_loaded
+parse_success
+fallback_used
+retry_used
+assistant_message
+dashboard_payload
 ```
 
 ## Test A Custom Prompt
