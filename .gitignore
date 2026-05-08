@@ -54,6 +54,9 @@ backend/.env
 !/backend_fine_tuning/.env.example
 !/backend_fine_tuning/fine_tuning/configs/model_config.example.env
 /backend_fine_tuning/.env
+/backend_fine_tuning/.venv/
+/backend_fine_tuning/.venv-linux/
+/backend_fine_tuning/.tmp/
 /backend_fine_tuning/fine_tuning/scripts/__pycache__/
 
 # vercel
