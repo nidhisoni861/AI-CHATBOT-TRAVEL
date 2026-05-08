@@ -252,7 +252,11 @@ def generate_text(tokenizer, model, prompt: str, config: AdapterConfig) -> str:
         )
 
     generated_ids = output_ids[0][inputs["input_ids"].shape[-1] :]
-    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+    return tokenizer.decode(
+        generated_ids,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    ).strip()
 
 
 def print_config(config: AdapterConfig) -> None:

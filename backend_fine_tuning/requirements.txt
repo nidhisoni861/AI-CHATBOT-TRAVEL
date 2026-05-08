@@ -8,3 +8,4 @@ safetensors
 fastapi
 uvicorn[standard]
 pydantic
+requests

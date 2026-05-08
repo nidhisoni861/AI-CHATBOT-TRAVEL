@@ -23,7 +23,7 @@ def list_models() -> dict[str, object]:
     }
 
 
-@router.get("/chat", response_model=ChatResponse)
+@router.get("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 def chat_get(
     message: str = Query(min_length=1),
     model_variant: ModelVariant = "fine_tuned",
@@ -33,7 +33,7 @@ def chat_get(
     return generate_travel_response(request)
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat_post(request: Request) -> ChatResponse:
     try:
         payload = await request.json()

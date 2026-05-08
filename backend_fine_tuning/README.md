@@ -8,10 +8,10 @@ The FastAPI implementation lives in:
 add_backend/app/
 ```
 
-This folder keeps the model configuration, Python environment, and compatibility entrypoint so teammates can run:
+This folder keeps the model configuration, Python environment, and compatibility entrypoint so teammates can run the backend on port `9000`:
 
 ```bash
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+./start_backend_wsl.sh
 ```
 
 ## What This Backend Does
@@ -49,7 +49,8 @@ backend_fine_tuning/
 |-- .env                          # local only, ignored
 |-- .env.example                  # teammate-safe config template
 |-- README.md
-`-- requirements.txt
+|-- requirements.txt
+`-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
 ```
 
 Archived training/proof files are under:
@@ -154,12 +155,17 @@ Expected result: no syntax errors.
 
 ## Run Backend
 
-WSL/Linux:
+WSL/Linux recommended:
 
 ```bash
 cd backend_fine_tuning
-source .venv-linux/bin/activate
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+./start_backend_wsl.sh
+```
+
+The script creates `.venv-linux` if needed, installs `requirements.txt`, loads `backend_fine_tuning/.env`, and starts:
+
+```bash
+python -m uvicorn add_backend.app.main:app --host 0.0.0.0 --port 9000
 ```
 
 Windows PowerShell:
@@ -167,7 +173,7 @@ Windows PowerShell:
 ```powershell
 cd backend_fine_tuning
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
 ```
 
 For final demos, do not use `--reload`. Reload restarts the process and reloads the model again.
@@ -177,33 +183,33 @@ By default, startup preloads the fine-tuned model once. To skip preload and lazy
 WSL/Linux:
 
 ```bash
-BACKEND_PRELOAD_MODEL=none python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+BACKEND_PRELOAD_MODEL=none ./start_backend_wsl.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:BACKEND_PRELOAD_MODEL="none"
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
 ```
 
 ## Local URLs
 
 ```text
 Health:
-http://127.0.0.1:8000/health
+http://127.0.0.1:9000/health
 
 API docs:
-http://127.0.0.1:8000/docs
+http://127.0.0.1:9000/docs
 
 Frontend chat endpoint:
-http://127.0.0.1:8000/chat
+http://127.0.0.1:9000/chat
 
 Manual model test endpoint:
-http://127.0.0.1:8000/api/model/test
+http://127.0.0.1:9000/api/model/test
 
 Model list:
-http://127.0.0.1:8000/models
+http://127.0.0.1:9000/models
 ```
 
 ## Test A Custom Prompt

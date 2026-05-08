@@ -8,7 +8,7 @@ from fastapi import APIRouter
 router = APIRouter(tags=["model-test"])
 
 
-@router.post("/model/test", response_model=ChatResponse)
+@router.post("/model/test", response_model=ChatResponse, response_model_exclude_none=True)
 def test_model(request: ChatRequest) -> ChatResponse:
     return generate_travel_response(request)
 

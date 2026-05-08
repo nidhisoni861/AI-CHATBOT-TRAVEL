@@ -70,6 +70,10 @@ next-env.d.ts
 /extra_app/
 /new_backend/
 
+# fine-tuning dataset files (large, local-only)
+/backend_fine_tuning/fine_tuning/data/processed/*.jsonl
+/backend_fine_tuning/fine_tuning/data/raw/
+
 # fine-tuning outputs and model artifacts
 /backend_fine_tuning/fine_tuning/outputs/*
 !/backend_fine_tuning/fine_tuning/outputs/.gitkeep
