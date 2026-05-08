@@ -1,4 +1,4 @@
-import { TravelDashboard } from "@/src/features/chatbot/components/TravelDashboard";
+import { WanderAIDashboard } from "@/src/features/dashboard/components/WanderAIDashboard";
 
 export const metadata = {
   title: "Chat - WanderAI",
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function ChatPage() {
-  return <TravelDashboard />;
+  return <WanderAIDashboard />;
 }

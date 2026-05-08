@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+  --primary-gradient: linear-gradient(90deg,#7c3aed,#f0abfc,#06b6d4);
+}
+
+html,body,#root{
+  height:100%;
+}
+
+/* Animations used by the dashboard */
+@keyframes floatSlow { 0% { transform: translateY(0px); } 50% { transform: translateY(-18px); } 100% { transform: translateY(0px); } }
+@keyframes floatMedium { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+@keyframes particleDrift { 0% { transform: translateY(0px); } 100% { transform: translateY(-30px); } }
+@keyframes orbit { 0% { transform: rotate(0deg) } 100% { transform: rotate(360deg) } }
+@keyframes pulse-slow { 0% { opacity: .9; transform: scale(1); } 50% { opacity: .6; transform: scale(1.04); } 100% { opacity: .9; transform: scale(1); } }
+@keyframes route-shimmer { 0% { stroke-dashoffset: 1000 } 100% { stroke-dashoffset: 0 } }
+
+.animate-float-slow { animation: floatSlow 14s ease-in-out infinite; }
+.animate-float-medium { animation: floatMedium 10s ease-in-out infinite; }
+.animate-orbit { animation: orbit 20s linear infinite; }
+.animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+.animate-route-shimmer { stroke-dasharray: 1000; animation: route-shimmer 8s linear infinite; }
+.animate-pulse-dot { animation: pulse-slow 2s ease-in-out infinite; }
+.animate-light-streak { animation: light-streak 18s linear infinite; }
+
+/* light streak keyframe used inline for compatibility */
+@keyframes light-streak { 0% { transform: translateX(-10%); } 50% { transform: translateX(10%); } 100% { transform: translateX(-10%); } }
+
+/* small utility */
+.bg-gradient-primary { background: var(--primary-gradient); background-size: 200% 200%; }
+
+/* ensure no horizontal overflow */
+html, body { overflow-x: hidden; }
