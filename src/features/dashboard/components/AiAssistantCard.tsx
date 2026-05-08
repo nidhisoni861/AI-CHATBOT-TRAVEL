@@ -36,11 +36,11 @@ export default function AiAssistantCard() {
   }
 
   return (
-    <div className="rounded-3xl bg-white/50 backdrop-blur-2xl border border-white/60 p-6 shadow-[0_30px_100px_rgba(99,102,241,0.12)] hover:-translate-y-1 transition-transform">
+    <div className="rounded-3xl bg-white/55 backdrop-blur-2xl border border-white/60 p-6 shadow-[0_30px_100px_rgba(99,102,241,0.12)] hover:-translate-y-1 transition-transform">
       <div className="flex flex-col items-center">
         <AnimatedRobot />
-        <h2 className="mt-4 text-3xl font-semibold">Hello, Traveler! <span className="text-2xl">👋</span></h2>
-        <p className="text-sm text-slate-600 mt-2">How can I help you plan your next adventure?</p>
+        <h2 className="mt-4 text-3xl font-semibold text-slate-700">Hello, Traveler! <span className="text-2xl">👋</span></h2>
+        <p className="text-sm text-slate-500 mt-2">How can I help you plan your next adventure?</p>
         {activeChat && (
           <div className="text-xs text-zinc-500 mt-1">Active chat: <span className="font-medium">{activeChat.title}</span></div>
         )}
@@ -56,7 +56,6 @@ export default function AiAssistantCard() {
           <button
             key={a.title}
             onClick={() => {
-              // quick action: add a user message and trigger a mock reply
               const q = `${a.title} - ${a.subtitle}`;
               addMessage(chatId, { role: "user", text: q });
               setTyping(true);
@@ -65,11 +64,11 @@ export default function AiAssistantCard() {
                 .catch(() => addMessage(chatId, { role: "bot", text: "Error: failed to fetch" }))
                 .finally(() => setTyping(false));
             }}
-            className="p-4 rounded-xl bg-white/5 backdrop-blur-sm hover:scale-105 transition-transform flex items-start gap-3"
+            className="p-4 rounded-xl bg-white/6 backdrop-blur-sm hover:scale-105 transition-transform flex items-start gap-3"
           >
             <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-violet-600 to-sky-500 flex items-center justify-center text-white text-xl">{a.emoji}</div>
             <div className="text-left">
-              <div className="text-sm font-medium">{a.title}</div>
+              <div className="text-sm font-medium text-slate-700">{a.title}</div>
               <div className="text-xs text-slate-500">{a.subtitle}</div>
             </div>
           </button>

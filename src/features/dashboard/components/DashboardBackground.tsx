@@ -5,10 +5,14 @@ export default function DashboardBackground() {
   return (
     <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
       <div className="absolute -left-72 -top-56 w-[900px] h-[900px] rounded-full bg-gradient-to-br from-[#c4b5fd] via-[#a78bfa] to-[#7dd3fc] opacity-30 blur-3xl animate-float-slow" />
-      <div className="absolute -right-72 -bottom-56 w-[700px] h-[700px] rounded-full bg-gradient-to-tr from-[#fbcfe8] via-[#f0abfc] to-[#60a5fa] opacity-20 blur-2xl animate-float-medium" />
+      <div className="absolute -right-72 -bottom-56 w-[700px] h-[700px] rounded-full bg-gradient-to-tr from-[#fbcfe8] via-[#f0abfc] to-[#60a5fa] opacity-25 blur-2xl animate-float-medium" />
 
       {/* light streaks */}
       <div className="absolute left-1/2 top-10 w-[1200px] h-[80px] -translate-x-1/2 bg-[linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.06),rgba(255,255,255,0.02))] opacity-20 blur-xl animate-light-streak" />
+
+      {/* small orbiting orb */}
+      <div className="absolute left-20 top-40 w-40 h-40 rounded-full bg-gradient-to-br from-violet-400 to-cyan-300 opacity-60 blur-xl animate-float-medium" />
+      <div className="absolute right-32 bottom-20 w-32 h-32 rounded-full bg-gradient-to-br from-pink-300 to-indigo-300 opacity-50 blur-lg animate-float-slow" />
 
       {/* particles */}
       <div className="absolute inset-0">

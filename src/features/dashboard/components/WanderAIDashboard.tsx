@@ -10,10 +10,10 @@ export function WanderAIDashboard() {
   return (
     <div className="min-h-screen relative bg-[linear-gradient(180deg,#eef2ff_0%,#fff1f8_100%)]">
       <DashboardBackground />
-      <div className="max-w-[1800px] mx-auto px-6 py-6 relative z-10">
+      <div className="max-w-[1500px] mx-auto px-6 py-6 relative z-10">
         <DashboardHeader />
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1.08fr_1fr] gap-6">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1.08fr_1fr] gap-6 items-start">
           <div className="lg:col-span-1">
             <ExploreMapCard />
           </div>
