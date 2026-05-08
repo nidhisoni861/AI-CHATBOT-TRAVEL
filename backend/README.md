@@ -47,35 +47,60 @@ backend/
 ├── .env.example             # Environment variables template
 ├── requirements.txt         # Python dependencies
 ├── run.py                   # Server startup script
+├── run_backend.bat          # Windows startup script
 └── README.md               # This file
 ```
 
 ## Setup Instructions
 
-### 1. Install Dependencies
+### First-Time Setup
 
 ```bash
 # Navigate to backend directory
 cd backend
 
-# Create virtual environment (recommended)
+# Create virtual environment
 python -m venv venv
 
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
+# Activate virtual environment (Windows)
+.\venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Configure environment variables
+copy .env.example .env
+# Edit .env with your API keys
 ```
 
-### 2. Configure Environment Variables
+### Daily Backend Start
+
+**Option 1: Double-click (Recommended)**
+```
+Double-click: run_backend.bat
+```
+
+**Option 2: Command Line**
+```bash
+.\run_backend.bat
+```
+
+**Option 3: Manual Start**
+```bash
+.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+> **Note:** Requirements only need to be installed again when `requirements.txt` changes.
+
+### Configure Environment Variables
 
 Copy `.env.example` to `.env` and fill in your API keys:
 
 ```bash
+# Windows
+copy .env.example .env
+
+# macOS/Linux
 cp .env.example .env
 ```
 
@@ -100,7 +125,7 @@ RAPIDAPI_HOST=booking-com15.p.rapidapi.com
 TICKETMASTER_API_KEY=your_ticketmaster_api_key
 ```
 
-### 3. API Keys Setup
+### API Keys Setup
 
 #### HuggingFace API Token
 1. Go to [Hugging Face](https://huggingface.co/)
@@ -121,15 +146,12 @@ TICKETMASTER_API_KEY=your_ticketmaster_api_key
 1. Sign up at [Ticketmaster Developer Portal](https://developer.ticketmaster.com/)
 2. Get your API key
 
-## Running the Server
+## Server Information
 
-### Development Mode
-
-```bash
-python run.py
-```
-
-The server will start at `http://localhost:8000`
+Once started, the backend will be available at:
+- **Main API**: `http://localhost:8000`
+- **API Documentation**: `http://localhost:8000/docs`
+- **Health Check**: `http://localhost:8000/health`
 
 ### Production Mode
 
@@ -260,7 +282,8 @@ Make sure your Next.js frontend is running on one of these ports.
 1. **Port already in use**: Change port in `run.py` or stop the conflicting service
 2. **API key errors**: Verify all environment variables are set correctly
 3. **CORS issues**: Ensure frontend is running on allowed ports
-4. **Module not found**: Make sure you're in the backend directory and virtual environment is activated
+4. **Module not found**: Run `.\run_backend.bat` to ensure proper setup
+5. **Virtual environment issues**: Delete `venv` folder and run first-time setup again
 
 ### Getting Help
 
