@@ -1,11 +1,67 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, List, Optional
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 
 ModelVariant = Literal["base", "fine_tuned"]
+
+
+class WeatherInfo(BaseModel):
+    """Model for weather information"""
+    location: str
+    temperature: float
+    description: str
+    humidity: int
+    wind_speed: float
+
+
+class FlightInfo(BaseModel):
+    """Model for flight information"""
+    origin: str
+    destination: str
+    departure_date: str
+    return_date: Optional[str] = None
+    price: Optional[str] = None
+    airline: Optional[str] = None
+
+
+class HotelInfo(BaseModel):
+    """Model for hotel information"""
+    name: str
+    location: str
+    price_per_night: Optional[str] = None
+    rating: Optional[float] = None
+    amenities: Optional[List[str]] = []
+
+
+class EventInfo(BaseModel):
+    """Model for local events"""
+    name: str
+    date: str
+    location: str
+    category: str
+    price: Optional[str] = None
+    url: Optional[str] = None
+
+
+class ChatMessage(BaseModel):
+    """Model for a single chat message"""
+    role: str  # 'user' or 'assistant'
+    content: str
+    timestamp: Optional[datetime] = None
+
+
+class TravelItinerary(BaseModel):
+    """Model for travel itinerary"""
+    destination: str
+    duration_days: int
+    activities: List[str]
+    accommodation: Optional[str] = None
+    transportation: Optional[str] = None
+    estimated_budget: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
