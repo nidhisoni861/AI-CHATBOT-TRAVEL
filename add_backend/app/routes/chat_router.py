@@ -1,9 +1,6 @@
 ﻿from __future__ import annotations
 
-import json
-
-from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import ValidationError
+from fastapi import APIRouter, Query
 
 from add_backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
 from add_backend.app.services.ai_model_service import generate_travel_response
@@ -34,26 +31,6 @@ async def chat_get(
 
 
 @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
-async def chat_post(request: Request) -> ChatResponse:
-    try:
-        payload = await request.json()
-    except json.JSONDecodeError as exc:
-        body = (await request.body()).decode("utf-8")
-        try:
-            payload = json.loads(body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Request body must be valid JSON.") from exc
-
-    if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail="JSON string body must contain a JSON object.") from exc
-
-    try:
-        chat_request = ChatRequest.model_validate(payload)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
-
+async def chat_post(chat_request: ChatRequest) -> ChatResponse:
     return await generate_travel_response(chat_request)
 
