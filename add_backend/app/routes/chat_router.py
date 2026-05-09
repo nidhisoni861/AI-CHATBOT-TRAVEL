@@ -32,5 +32,34 @@ async def chat_get(
 
 @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat_post(chat_request: ChatRequest) -> ChatResponse:
-    return await generate_travel_response(chat_request)
+    response = await generate_travel_response(chat_request)
+    # Safety check: ensure response is not None
+    if response is None:
+        return ChatResponse(
+            session_id=chat_request.session_id,
+            selected_model=chat_request.model_variant,
+            adapter_loaded=chat_request.model_variant == "fine_tuned",
+            parse_success=False,
+            fallback_used=True,
+            retry_used=False,
+            assistant_message="I'm sorry, I encountered an error processing your request. Please try again.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "error",
+                "weather": {"status": "unavailable"},
+                "flights": {"status": "unavailable"},
+                "hotels": {"status": "unavailable"},
+                "local_events": {"status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": None,
+                "dashboard_actions": ["show_error"],
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": ["weather", "flights", "hotels", "events"],
+                    "warnings": ["Response validation failed"]
+                }
+            }
+        )
+    return response
 
