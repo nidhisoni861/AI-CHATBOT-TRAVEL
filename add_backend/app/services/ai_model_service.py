@@ -384,64 +384,82 @@ def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
     if has_weather and not has_flights and not has_hotels and not has_events:
         # Weather-only request
         return (
-            "You are Wanderly weather assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            "You are a weather API response generator. Output ONLY weather data. No other fields.\n"
             f"USER: {message}\n"
             f"APIs: {api_summary}\n"
-            "You only output:\n"
+            "You must output EXACTLY this JSON structure:\n"
             '{"assistant_message":"Here is the current weather information for your requested location.",'
             '"dashboard_payload":{'
+            '"schema_version":"travel_dashboard_v1",'
             '"intent":"weather_query",'
             '"weather":{...weather_data...},'
-            '"flights":{"status":"unavailable"},'
-            '"hotels":{"status":"unavailable"},'
-            '"local_events":{"status":"unavailable"},'
-            '"itinerary":[],'
-            '"food_recommendations":[]'
+            '"flights":null,'
+            '"hotels":null,'
+            '"local_events":null,'
+            '"trip_summary":null,'
+            '"food_recommendations":null,'
+            '"itinerary":null,'
+            '"map_data":null,'
+            '"budget_breakdown":null,'
             '"dashboard_actions":["show_weather"],'
             '"api_grounding":{"used_api":["weather"],"missing_api":[],"warnings":[]}'
             "}}\n"
+            f"STRICT RULES: No itinerary, no food recommendations, no trip summary, no budget breakdown. ONLY weather data.\n"
+            f"Weather data available: {api_summary}\n"
         )
     
     elif has_flights and not has_weather and not has_hotels and not has_events:
         # Flight-only request
         return (
-            "You are Wanderly flight assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            "You are a flight API response generator. Output ONLY flight data. No other fields.\n"
             f"USER: {message}\n"
             f"APIs: {api_summary}\n"
-            "You only output:\n"
+            "You must output EXACTLY this JSON structure:\n"
             '{"assistant_message":"Here are the available flight options for your requested route.",'
             '"dashboard_payload":{'
+            '"schema_version":"travel_dashboard_v1",'
             '"intent":"flight_search",'
-            '"weather":{"status":"unavailable"},'
+            '"weather":null,'
             '"flights":{...flight_data...},'
-            '"hotels":{"status":"unavailable"},'
-            '"local_events":{"status":"unavailable"},'
-            '"itinerary":[],'
-            '"food_recommendations":[]'
+            '"hotels":null,'
+            '"local_events":null,'
+            '"trip_summary":null,'
+            '"food_recommendations":null,'
+            '"itinerary":null,'
+            '"map_data":null,'
+            '"budget_breakdown":null,'
             '"dashboard_actions":["show_flights"],'
             '"api_grounding":{"used_api":["flights"],"missing_api":[],"warnings":[]}'
             "}}\n"
+            f"STRICT RULES: No weather, no hotels, no events, no food recommendations, no trip summary. ONLY flight data.\n"
+            f"Flight data available: {api_summary}\n"
         )
     
     elif has_hotels and not has_weather and not has_flights and not has_events:
         # Hotel-only request
         return (
-            "You are Wanderly hotel assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            "You are a hotel API response generator. Output ONLY hotel data. No other fields.\n"
             f"USER: {message}\n"
             f"APIs: {api_summary}\n"
-            "You only output:\n"
+            "You must output EXACTLY this JSON structure:\n"
             '{"assistant_message":"Here are the available hotel options for your requested destination.",'
             '"dashboard_payload":{'
+            '"schema_version":"travel_dashboard_v1",'
             '"intent":"hotel_search",'
-            '"weather":{"status":"unavailable"},'
-            '"flights":{"status":"unavailable"},'
+            '"weather":null,'
+            '"flights":null,'
             '"hotels":{...hotel_data...},'
-            '"local_events":{"status":"unavailable"},'
-            '"itinerary":[],'
-            '"food_recommendations":[]'
+            '"local_events":null,'
+            '"trip_summary":null,'
+            '"food_recommendations":null,'
+            '"itinerary":null,'
+            '"map_data":null,'
+            '"budget_breakdown":null,'
             '"dashboard_actions":["show_hotels"],'
             '"api_grounding":{"used_api":["hotels"],"missing_api":[],"warnings":[]}'
             "}}\n"
+            f"STRICT RULES: No weather, no flights, no events, no food recommendations, no trip summary. ONLY hotel data.\n"
+            f"Hotel data available: {api_summary}\n"
         )
     
     else:
