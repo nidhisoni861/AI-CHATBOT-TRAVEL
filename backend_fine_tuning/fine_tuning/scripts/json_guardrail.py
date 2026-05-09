@@ -536,7 +536,44 @@ def validate_normalized_response(payload: dict[str, Any]) -> dict[str, Any]:
         "assistant_message": payload.get("assistant_message", ""),
         "dashboard_payload": dashboard_payload
     })
-    return validated.model_dump(mode="python")
+    
+    # Convert to dict for final cleanup
+    final_payload = validated.model_dump(mode="python")
+    final_dashboard = final_payload["dashboard_payload"]
+    
+    # Remove legacy fields from final response
+    for legacy_key in [
+        "flight",
+        "stay_recommendations", 
+        "flight_options",
+        "hotel_options",
+        "weather_data",
+        "events",
+    ]:
+        final_dashboard.pop(legacy_key, None)
+    
+    # Clean up API grounding warnings - remove incorrect warning when APIs are available
+    api_grounding = final_dashboard.get("api_grounding", {})
+    used_api = api_grounding.get("used_api", [])
+    missing_api = api_grounding.get("missing_api", [])
+    warnings = api_grounding.get("warnings", [])
+    
+    # Remove warning about missing live data when it's actually available
+    cleaned_warnings = []
+    for warning in warnings:
+        if ("No live transport, hotel, weather, event, or place-rating API data was provided" in warning and
+            ("weather" in used_api or "flights" in used_api or "hotels" in used_api)):
+            continue  # Skip this incorrect warning
+        cleaned_warnings.append(warning)
+    
+    # Rebuild API grounding with canonical names only
+    final_dashboard["api_grounding"] = {
+        "used_api": used_api,
+        "missing_api": missing_api,
+        "warnings": cleaned_warnings
+    }
+    
+    return final_payload
 
 
 def _with_dashboard_defaults(dashboard_payload: dict[str, Any]) -> dict[str, Any]:
