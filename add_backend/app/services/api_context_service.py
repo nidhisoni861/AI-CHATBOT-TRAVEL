@@ -20,10 +20,34 @@ class ApiContextService:
     """Service to build and enrich API context from user messages"""
 
     def __init__(self):
-        self.weather_service = WeatherService()
-        self.flight_service = FlightService()
-        self.hotel_service = HotelService()
-        self.events_service = EventsService()
+        self._weather_service = None
+        self._flight_service = None
+        self._hotel_service = None
+        self._events_service = None
+
+    @property
+    def weather_service(self):
+        if self._weather_service is None:
+            self._weather_service = WeatherService()
+        return self._weather_service
+
+    @property
+    def flight_service(self):
+        if self._flight_service is None:
+            self._flight_service = FlightService()
+        return self._flight_service
+
+    @property
+    def hotel_service(self):
+        if self._hotel_service is None:
+            self._hotel_service = HotelService()
+        return self._hotel_service
+
+    @property
+    def events_service(self):
+        if self._events_service is None:
+            self._events_service = EventsService()
+        return self._events_service
 
     def extract_travel_info(self, message: str) -> Dict[str, Any]:
         """Extract travel information from user message"""

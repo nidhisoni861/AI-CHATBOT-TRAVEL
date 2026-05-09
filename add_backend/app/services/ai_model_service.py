@@ -132,7 +132,28 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
                 "duration_days": duration,
                 "travelers": "solo",
                 "budget": budget,
-                "origin": origin
+                "origin": origin,
+                "source": "backend_extraction"
+            },
+            "weather": {
+                "data": api_context.get("weather"),
+                "source": "live_api",
+                "status": "missing_api_key" if "Weather service unavailable - API key missing" in api_context.get("warnings", []) else "unavailable"
+            },
+            "flights": {
+                "data": api_context.get("flights", []),
+                "source": "live_api",
+                "status": "unavailable"
+            },
+            "hotels": {
+                "data": api_context.get("hotels", []),
+                "source": "live_api", 
+                "status": "unavailable"
+            },
+            "local_events": {
+                "data": api_context.get("local_events", []),
+                "source": "live_api",
+                "status": "unavailable"
             },
             "food_recommendations": [],
             "itinerary": [],
@@ -143,6 +164,8 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
                 "total": "mock"
             },
             "dashboard_actions": ["show_trip_summary", "show_itinerary"],
+            "itinerary_source": "model_generated",
+            "assistant_message_source": "mock_model",
             "api_grounding": {
                 "used_api": api_context.get("used_apis", []),
                 "missing_api": api_context.get("missing_apis", []),
@@ -229,6 +252,19 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
             "first_raw_model_output": first_raw_text,
             "retry_raw_model_output": retry_raw_text,
         }
+    # Set assistant_message_source based on model variant
+    assistant_message_source = "mock_model"
+    if not MOCK_MODEL:
+        if request.model_variant == "fine_tuned":
+            assistant_message_source = "fine_tuned_model"
+        elif request.model_variant == "base":
+            assistant_message_source = "base_model"
+        else:
+            assistant_message_source = "model_generated"
+    
+    # Update assistant_message_source in dashboard_payload
+    normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
+
     return ChatResponse(
         session_id=request.session_id,
         selected_model=request.model_variant,

@@ -277,7 +277,7 @@ def enforce_api_context_truth(
     api_context: dict[str, Any] | None,
     user_message: str = "",
 ) -> dict[str, Any]:
-    """Force API-backed fields to match the API context instead of model guesses."""
+    """Force API-backed fields to match API context instead of model guesses."""
     normalized = normalize_dashboard_payload(payload, api_context, user_message)
     dashboard_payload = normalized["dashboard_payload"]
     context = api_context if isinstance(api_context, dict) else {}
@@ -287,11 +287,50 @@ def enforce_api_context_truth(
     weather = context.get("weather")
     local_events = _as_list(context.get("local_events"))
 
+    # Add provenance structure for API data
+    dashboard_payload["weather"] = {
+        "data": weather,
+        "source": "live_api",
+        "status": "available" if weather is not None else "unavailable"
+    }
+    dashboard_payload["flights"] = {
+        "data": flights,
+        "source": "live_api",
+        "status": "available" if flights else "unavailable"
+    }
+    dashboard_payload["hotels"] = {
+        "data": hotels,
+        "source": "live_api",
+        "status": "available" if hotels else "unavailable"
+    }
+    dashboard_payload["local_events"] = {
+        "data": local_events,
+        "source": "live_api",
+        "status": "available" if local_events else "unavailable"
+    }
+
+    # Add provenance for trip summary (backend extracted)
+    travel_info = context.get("travel_info", {})
+    if "trip_summary" in dashboard_payload:
+        dashboard_payload["trip_summary"]["source"] = "backend_extraction"
+        # Update with extracted info if missing
+        dashboard_payload["trip_summary"].update({
+            "destination": dashboard_payload["trip_summary"].get("destination", travel_info.get("destination", "Unknown")),
+            "duration_days": dashboard_payload["trip_summary"].get("duration_days", travel_info.get("duration_days", 2)),
+            "origin": dashboard_payload["trip_summary"].get("origin", travel_info.get("origin", "Berlin")),
+            "budget": dashboard_payload["trip_summary"].get("budget", travel_info.get("budget", "budget")),
+        })
+
+    # Add provenance for model-generated content
+    dashboard_payload["itinerary_source"] = "model_generated"
+    dashboard_payload["assistant_message_source"] = "model_generated"  # Will be overridden in ai_model_service based on model variant
+
+    # Keep existing legacy fields for backward compatibility
     _apply_api_truth(
         dashboard_payload,
         api_name="flights",
         available=bool(flights),
-        present=lambda: dashboard_payload.update({"flight": flights[0], "flight_options": flights}),
+        present=lambda: dashboard_payload.update({"flight": flights[0] if flights else None, "flight_options": flights}),
         missing=lambda: dashboard_payload.update({"flight": None, "flight_options": []}),
     )
     _apply_api_truth(
