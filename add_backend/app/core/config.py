@@ -27,6 +27,33 @@ def get_api_key(service_name: str) -> str:
     """Get API key for a specific service"""
     return os.getenv(service_name, "")
 
+def load_dotenv_and_get_env() -> None:
+    """Load environment variables and return environment dict"""
+    from dotenv import load_dotenv
+    from pathlib import Path
+    
+    project_root = Path(__file__).resolve().parents[3]
+    env_path = project_root / "backend_fine_tuning" / ".env"
+    
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
+        print(f"[CONFIG] Loaded environment from: {env_path}")
+    else:
+        print(f"[CONFIG] No .env file found at: {env_path}")
+        # Still try to load from project root as fallback
+        load_dotenv(project_root / ".env", override=False)
+        load_dotenv(project_root / "backend_fine_tuning" / ".env.example", override=False)
+    
+    # Export all environment variables so os.getenv() works everywhere
+    if env_path.exists():
+        with open(env_path, 'r') as f:
+            for line in f:
+                if '=' in line and not line.strip().startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    os.environ[key.strip()] = value.strip()
+    
+    print("[CONFIG] Environment variables loaded successfully")
+
 def is_service_enabled(service_name: str) -> bool:
     """Check if a service is enabled"""
     return bool(get_api_key(service_name))

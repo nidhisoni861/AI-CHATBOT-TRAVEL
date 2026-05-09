@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import config first to ensure environment is loaded
-from add_backend.app.core.config import load_environment
+from add_backend.app.core.config import load_dotenv_and_get_env
 from add_backend.app.routes.chat_router import router as chat_router
 from add_backend.app.routes.model_test_router import router as model_test_router
 from add_backend.app.routes.api_services_router import router as api_services_router
