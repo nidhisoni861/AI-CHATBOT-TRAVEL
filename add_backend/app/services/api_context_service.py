@@ -160,6 +160,55 @@ class ApiContextService:
             "budget": detected_budget
         }
 
+    def detect_user_intent(self, message: str) -> Dict[str, bool]:
+        """
+        Detect user intent to only call relevant services
+        """
+        message_lower = message.lower()
+        
+        intent = {
+            "flights": False,
+            "hotels": False, 
+            "weather": False,
+            "events": False
+        }
+        
+        # Flight keywords
+        flight_keywords = [
+            "flight", "fly", "flying", "airline", "airport", "depart", "arrival", 
+            "ticket", "booking", "trip", "travel", "journey", "from", "to"
+        ]
+        
+        # Hotel keywords  
+        hotel_keywords = [
+            "hotel", "stay", "accommodation", "room", "booking", "check in", "check out",
+            "resort", "lodging", "sleep", "night"
+        ]
+        
+        # Weather keywords
+        weather_keywords = [
+            "weather", "temperature", "rain", "sunny", "cloudy", "forecast",
+            "climate", "conditions", "hot", "cold"
+        ]
+        
+        # Events keywords
+        events_keywords = [
+            "event", "activity", "things to do", "attraction", "museum", "concert",
+            "festival", "show", "entertainment", "tour", "sightseeing"
+        ]
+        
+        # Detect intents
+        intent["flights"] = any(keyword in message_lower for keyword in flight_keywords)
+        intent["hotels"] = any(keyword in message_lower for keyword in hotel_keywords)
+        intent["weather"] = any(keyword in message_lower for keyword in weather_keywords)
+        intent["events"] = any(keyword in message_lower for keyword in events_keywords)
+        
+        # Special case: if no specific intent detected, assume general travel (flights)
+        if not any(intent.values()):
+            intent["flights"] = True
+            
+        return intent
+
     async def build_api_context_from_message(
         self, 
         message: str, 
@@ -185,6 +234,9 @@ class ApiContextService:
         # Extract travel info from message
         travel_info = self.extract_travel_info(message)
         
+        # Detect user intent to only call relevant services
+        intent = self.detect_user_intent(message)
+        
         # Build enriched context
         enriched_context = {
             "flights": [],
@@ -194,74 +246,79 @@ class ApiContextService:
             "warnings": [],
             "used_apis": [],
             "missing_apis": [],
-            "travel_info": travel_info  # Include extracted travel information
+            "travel_info": travel_info,  # Include extracted travel information
+            "detected_intent": intent  # Include detected intent for debugging
         }
         
-        # Try to fetch weather
-        try:
-            weather = await self.weather_service.get_current_weather(travel_info["destination"])
-            if weather:
-                enriched_context["weather"] = weather.dict() if hasattr(weather, 'dict') else weather
-                enriched_context["used_apis"].append("weather")
-            else:
-                enriched_context["warnings"].append("Weather service unavailable - API key missing")
+        # Only fetch weather if user asked for it
+        if intent["weather"]:
+            try:
+                weather = await self.weather_service.get_current_weather(travel_info["destination"])
+                if weather:
+                    enriched_context["weather"] = weather.dict() if hasattr(weather, 'dict') else weather
+                    enriched_context["used_apis"].append("weather")
+                else:
+                    enriched_context["warnings"].append("Weather service unavailable - API key missing")
+                    enriched_context["missing_apis"].append("weather")
+            except Exception as e:
+                enriched_context["warnings"].append(f"Weather service error: {str(e)}")
                 enriched_context["missing_apis"].append("weather")
-        except Exception as e:
-            enriched_context["warnings"].append(f"Weather service error: {str(e)}")
-            enriched_context["missing_apis"].append("weather")
         
-        # Try to fetch flights
-        try:
-            flights = await self.flight_service.search_flights(
-                travel_info["origin"],
-                travel_info["destination"],
-                travel_info["departure_date"],
-                travel_info["return_date"]
-            )
-            if flights:
-                enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
-                enriched_context["used_apis"].append("flights")
-            else:
-                enriched_context["warnings"].append("No flights found or API unavailable")
+        # Only fetch flights if user asked for them
+        if intent["flights"]:
+            try:
+                flights = await self.flight_service.search_flights(
+                    travel_info["origin"],
+                    travel_info["destination"],
+                    travel_info["departure_date"],
+                    travel_info["return_date"]
+                )
+                if flights:
+                    enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
+                    enriched_context["used_apis"].append("flights")
+                else:
+                    enriched_context["warnings"].append("No flights found or API unavailable")
+                    enriched_context["missing_apis"].append("flights")
+            except Exception as e:
+                enriched_context["warnings"].append(f"Flight service error: {str(e)}")
                 enriched_context["missing_apis"].append("flights")
-        except Exception as e:
-            enriched_context["warnings"].append(f"Flight service error: {str(e)}")
-            enriched_context["missing_apis"].append("flights")
         
-        # Try to fetch hotels
-        try:
-            hotels = await self.hotel_service.search_hotels(
-                travel_info["destination"],
-                travel_info["check_in"],
-                travel_info["check_out"],
-                travel_info["guests"]
-            )
-            if hotels:
-                enriched_context["hotels"] = [hotel.dict() if hasattr(hotel, 'dict') else hotel for hotel in hotels]
-                enriched_context["used_apis"].append("hotels")
-            else:
-                enriched_context["warnings"].append("No hotels found or API unavailable")
+        # Only fetch hotels if user asked for them
+        if intent["hotels"]:
+            try:
+                hotels = await self.hotel_service.search_hotels(
+                    travel_info["destination"],
+                    travel_info["check_in"],
+                    travel_info["check_out"],
+                    travel_info["guests"]
+                )
+                if hotels:
+                    enriched_context["hotels"] = [hotel.dict() if hasattr(hotel, 'dict') else hotel for hotel in hotels]
+                    enriched_context["used_apis"].append("hotels")
+                else:
+                    enriched_context["warnings"].append("No hotels found or API unavailable")
+                    enriched_context["missing_apis"].append("hotels")
+            except Exception as e:
+                enriched_context["warnings"].append(f"Hotel service error: {str(e)}")
                 enriched_context["missing_apis"].append("hotels")
-        except Exception as e:
-            enriched_context["warnings"].append(f"Hotel service error: {str(e)}")
-            enriched_context["missing_apis"].append("hotels")
         
-        # Try to fetch events
-        try:
-            events = await self.events_service.search_events(
-                travel_info["destination"],
-                travel_info["departure_date"],
-                travel_info["return_date"]
-            )
-            if events:
-                enriched_context["local_events"] = [event.dict() if hasattr(event, 'dict') else event for event in events]
-                enriched_context["used_apis"].append("events")
-            else:
-                enriched_context["warnings"].append("No events found or API unavailable")
-                enriched_context["missing_apis"].append("events")
-        except Exception as e:
-            enriched_context["warnings"].append(f"Events service error: {str(e)}")
-            enriched_context["missing_apis"].append("events")
+        # Only fetch events if user asked for them
+        if intent["events"]:
+            try:
+                events = await self.events_service.search_events(
+                    travel_info["destination"],
+                    travel_info["departure_date"],
+                    travel_info["return_date"]
+                )
+                if events:
+                    enriched_context["local_events"] = [event.dict() if hasattr(event, 'dict') else event for event in events]
+                    enriched_context["used_apis"].append("local_events")
+                else:
+                    enriched_context["warnings"].append("No events found or API unavailable")
+                    enriched_context["missing_apis"].append("local_events")
+            except Exception as e:
+                enriched_context["warnings"].append(f"Events service error: {str(e)}")
+                enriched_context["missing_apis"].append("local_events")
         
         return enriched_context
 
