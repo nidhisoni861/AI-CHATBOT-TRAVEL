@@ -214,6 +214,12 @@ class ApiContextService:
         else:
             intent["flights"] = False
         
+        # Only set hotels intent if explicitly requested AND no other higher priority intent detected
+        if hotel_detected and not weather_detected and not flight_detected and not events_detected:
+            intent["hotels"] = True
+        else:
+            intent["hotels"] = False
+        
         # Special case: if no specific intent detected, assume general travel (flights)
         if not any(intent.values()):
             intent["flights"] = True
