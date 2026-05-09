@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 export async function POST(request: NextRequest) {
   const body = await request.json();
 
-  const res = await fetch("http://127.0.0.1:9000/chat", {
+  const res = await fetch("https://vegan-audacious-crumpled.ngrok-free.dev/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
