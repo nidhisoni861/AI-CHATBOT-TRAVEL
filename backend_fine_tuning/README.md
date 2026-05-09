@@ -50,7 +50,8 @@ backend_fine_tuning/
 |-- .env.example                  # teammate-safe config template
 |-- README.md
 |-- requirements.txt
-`-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+|-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+`-- start_backend_windows.ps1     # Windows Terminal/PowerShell launcher, defaults to port 9000
 ```
 
 Archived training/proof files are under:
@@ -170,8 +171,12 @@ python -m uvicorn add_backend.app.main:app --host 0.0.0.0 --port 9000
 Windows PowerShell:
 
 ```powershell
-cd backend_fine_tuning
-.\.venv\Scripts\Activate.ps1
+.\backend_fine_tuning\start_backend_windows.ps1
+```
+
+The script creates `.venv` if needed, installs `requirements.txt`, loads `backend_fine_tuning/.env`, and starts:
+
+```powershell
 python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
 ```
 
@@ -189,7 +194,7 @@ Windows PowerShell:
 
 ```powershell
 $env:BACKEND_PRELOAD_MODEL="none"
-python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+.\backend_fine_tuning\start_backend_windows.ps1
 ```
 
 ## Local URLs
