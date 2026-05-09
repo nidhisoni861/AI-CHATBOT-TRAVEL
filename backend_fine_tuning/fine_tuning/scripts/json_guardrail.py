@@ -474,6 +474,63 @@ def validate_normalized_response(payload: dict[str, Any]) -> dict[str, Any]:
     # Remove legacy duplicate fields
     _remove_legacy_duplicate_fields(dashboard_payload)
     
+    # Compute API grounding from canonical fields (not from model output)
+    api_grounding = dashboard_payload.setdefault("api_grounding", {"used_api": [], "missing_api": [], "warnings": []})
+    
+    # Get canonical API sections
+    canonical_apis = {
+        "weather": dashboard_payload.get("weather", {}),
+        "flights": dashboard_payload.get("flights", {}),
+        "hotels": dashboard_payload.get("hotels", {}),
+        "events": dashboard_payload.get("local_events", {})
+    }
+    
+    # Compute used and missing APIs based on actual data presence
+    used_api = []
+    missing_api = []
+    
+    for api_name, section in canonical_apis.items():
+        if isinstance(section, dict):
+            status = section.get("status", "unavailable")
+            data = section.get("data")
+            if status == "available" and _has_live_data(data):
+                used_api.append(api_name)
+            else:
+                missing_api.append(api_name)
+        else:
+            # For non-dict sections, treat as missing
+            missing_api.append(api_name)
+    
+    # Update API grounding with canonical names only
+    api_grounding["used_api"] = used_api
+    api_grounding["missing_api"] = missing_api
+    
+    # Add static food fallback if food_recommendations is empty after filtering
+    food_recs = dashboard_payload.get("food_recommendations", [])
+    if not food_recs and isinstance(food_recs, list):
+        # Add 2-3 safe static food suggestions for common destinations
+        static_foods = [
+            {
+                "name": "Local Bakery",
+                "price_range": "low",
+                "type": "food",
+                "source": "static_food_fallback"
+            },
+            {
+                "name": "Traditional Café",
+                "price_range": "low", 
+                "type": "food",
+                "source": "static_food_fallback"
+            },
+            {
+                "name": "Market Square Food Stalls",
+                "price_range": "low",
+                "type": "food",
+                "source": "static_food_fallback"
+            }
+        ]
+        dashboard_payload["food_recommendations"] = static_foods
+    
     # Validate with Pydantic model
     validated = ModelDashboardResponse.model_validate({
         "assistant_message": payload.get("assistant_message", ""),
