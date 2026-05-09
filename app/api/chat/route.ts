@@ -27,5 +27,7 @@ export async function POST(request: NextRequest) {
   return Response.json({
     assistant_message: data.assistant_message,
     dashboard_payload: data.dashboard_payload ?? null,
+    fallback_used: data.fallback_used ?? false,
+    parse_success: data.parse_success ?? true,
   });
 }

@@ -85,6 +85,7 @@ interface ChatMessage {
   text: string;
   time: string;
   dashboard?: DashboardPayload | null;
+  showDashboard?: boolean;
 }
 
 // ─── Dashboard Sub-cards ──────────────────────────────────────────────────────
@@ -338,19 +339,21 @@ const SUGGESTIONS = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function initialMessage(): ChatMessage {
+  return {
+    id: "init",
+    role: "assistant",
+    text: "New chat started ✨\n\nTell me your destination, travel dates, budget, and travel style. I'll build your trip plan.",
+    time: new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
+}
+
 export default function ChatBotPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "init",
-      role: "assistant",
-      text: "New chat started ✨\n\nTell me your destination, travel dates, budget, and travel style. I'll build your trip plan.",
-      time: new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([initialMessage()]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const sessionId = useRef(`session-${Date.now()}`);
@@ -359,6 +362,13 @@ export default function ChatBotPanel() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  function newChat() {
+    if (loading) return;
+    sessionId.current = `session-${Date.now()}`;
+    setMessages([initialMessage()]);
+    setInput("");
+  }
 
   async function sendMessage(text?: string) {
     const msg = (text ?? input).trim();
@@ -399,6 +409,10 @@ export default function ChatBotPanel() {
             "I couldn't process that. Please try again.",
           time: now(),
           dashboard: data.dashboard_payload ?? null,
+          showDashboard:
+            !data.fallback_used &&
+            data.parse_success &&
+            !!data.dashboard_payload,
         },
       ]);
     } catch {
@@ -498,7 +512,9 @@ export default function ChatBotPanel() {
                     {msg.time}
                   </p>
                 </div>
-                {msg.dashboard && <DashboardCards payload={msg.dashboard} />}
+                {msg.showDashboard && msg.dashboard && (
+                  <DashboardCards payload={msg.dashboard} />
+                )}
               </div>
             </div>
           )
@@ -544,8 +560,10 @@ export default function ChatBotPanel() {
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
-            aria-label="Add"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm sm:h-11 sm:w-11"
+            aria-label="New chat"
+            onClick={newChat}
+            disabled={loading}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50 sm:h-11 sm:w-11"
           >
             <Plus className="h-5 w-5" />
           </button>
