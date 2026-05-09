@@ -33,6 +33,7 @@ yarn-error.log*
 # Python / ML
 __pycache__/
 *.pyc
+*.egg-info/
 
 # Python virtual environments
 venv/

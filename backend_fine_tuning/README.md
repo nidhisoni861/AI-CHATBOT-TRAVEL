@@ -5,13 +5,19 @@ This folder contains the local runtime setup for the Wanderly model backend demo
 The FastAPI implementation lives in:
 
 ```text
-add_backend/app/
+backend_fine_tuning/app/
 ```
 
 This folder keeps the model configuration, Python environment, and compatibility entrypoint so teammates can run the backend on port `9000`:
 
 ```bash
 ./backend_fine_tuning/start_backend_wsl.sh
+```
+
+Windows PowerShell users can run the matching Windows launcher:
+
+```powershell
+.\backend_fine_tuning\start_backend_windows.ps1
 ```
 
 ## What This Backend Does
@@ -28,11 +34,11 @@ Only one model variant is kept in memory at a time for local laptop safety.
 
 Install these first:
 
-1. Python 3.10 or newer
+1. Python 3.11 recommended for Windows PowerShell
 2. Git
 3. A Hugging Face account and access token
 4. Enough disk space for the base model download, about 7 GB
-5. Recommended: WSL/Ubuntu on Windows for smoother PyTorch/model loading
+5. For GPU acceleration on Windows: NVIDIA GPU drivers and CUDA-enabled PyTorch
 
 The first run can take time because the base model weights are downloaded. Later runs use the local Hugging Face cache.
 
@@ -50,7 +56,8 @@ backend_fine_tuning/
 |-- .env.example                  # teammate-safe config template
 |-- README.md
 |-- requirements.txt
-`-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+|-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+`-- start_backend_windows.ps1     # Windows PowerShell launcher, defaults to port 9000
 ```
 
 Archived training/proof files are under:
@@ -89,35 +96,62 @@ Keep the other values as provided unless the checkpoint changes.
 
 ## Setup With Windows PowerShell
 
-From the project root:
-
-```powershell
-cd backend_fine_tuning
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Create your local `.env`:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then edit `.env` and set:
+The Windows launcher creates and uses:
 
 ```text
-HF_TOKEN=your_real_huggingface_token
+backend_fine_tuning\.venv
 ```
 
-If PowerShell blocks activation, run this once in that terminal:
+It prefers Python 3.11 at:
+
+```text
+%LOCALAPPDATA%\Programs\Python\Python311\python.exe
+```
+
+If you need to create the environment manually from the project root:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+& "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe" -m venv .\backend_fine_tuning\.venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\backend_fine_tuning\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r .\backend_fine_tuning\requirements.txt
+pip install -e .
 ```
 
-Then activate again.
+For NVIDIA GPU acceleration on Windows, install CUDA PyTorch in the same venv:
+
+```powershell
+pip uninstall -y torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install -U transformers accelerate peft bitsandbytes sentencepiece protobuf safetensors huggingface_hub
+```
+
+Verify Windows is using Python 3.11 and CUDA:
+
+```powershell
+python --version
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.version.cuda); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO CUDA')"
+```
+
+Expected on the RTX 4060 laptop setup:
+
+```text
+Python 3.11.x
+True
+12.4
+NVIDIA GeForce RTX 4060 Laptop GPU
+```
+
+Create your local `.env` if needed:
+
+```powershell
+Copy-Item .\backend_fine_tuning\.env.example .\backend_fine_tuning\.env
+```
+
+Then edit `.env` and set `HF_TOKEN=your_real_huggingface_token`.
+
+Windows PowerShell and WSL do not share Python environments or Hugging Face login/cache state. If your token is not in `.env`, run `huggingface-cli login` inside the Windows venv.
 
 ## Required `.env`
 
@@ -147,8 +181,8 @@ Do not commit `.env`.
 
 Compile the runtime files:
 
-```bash
-python -m compileall app fine_tuning ../add_backend
+```powershell
+python -m compileall backend_fine_tuning
 ```
 
 Expected result: no syntax errors.
@@ -164,15 +198,13 @@ WSL/Linux recommended:
 The script creates `.venv-linux` if needed, installs `requirements.txt`, loads `backend_fine_tuning/.env`, and starts:
 
 ```bash
-python -m uvicorn add_backend.app.main:app --host 0.0.0.0 --port 9000
+python -m uvicorn backend_fine_tuning.app.main:app --host 0.0.0.0 --port 9000
 ```
 
 Windows PowerShell:
 
 ```powershell
-cd backend_fine_tuning
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+.\backend_fine_tuning\start_backend_windows.ps1
 ```
 
 For final demos, do not use `--reload`. Reload restarts the process and reloads the model again.
@@ -189,7 +221,7 @@ Windows PowerShell:
 
 ```powershell
 $env:BACKEND_PRELOAD_MODEL="none"
-python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+.\backend_fine_tuning\start_backend_windows.ps1
 ```
 
 ## Local URLs
@@ -394,4 +426,5 @@ On local machines, switching unloads the current model and loads the selected va
 - `Download complete: 0.00B` usually means the files are already cached locally.
 - The adapter is downloaded from the Hugging Face dataset repo and then loaded from a local folder.
 - PEFT should load from the local adapter folder, not directly from the `.safetensors` file.
+- `wanderly_backend.egg-info/` is generated by `pip install -e .` for editable local installs. Do not commit it.
 - Keep model weights, checkpoints, `.env`, and cache folders out of Git.

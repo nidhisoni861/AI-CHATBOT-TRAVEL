@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wanderly-backend"
+version = "0.1.0"
+description = "Wanderly AI Travel Assistant — fine-tuned LLM backend"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+# Discover all Python packages starting from the project root.
+# This picks up backend_fine_tuning and all its sub-packages.
+where = ["."]
+include = ["backend_fine_tuning*"]

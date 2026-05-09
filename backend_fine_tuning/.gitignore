@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+.venv-linux/
+venv/
+env/
+
+# Environment variables (never commit secrets)
+.env
+
+# Model artefacts (can be very large)
+fine_tuning/checkpoints/
+fine_tuning/outputs/
+
+# Temporary files
+*.log
+*.tmp
+.tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
