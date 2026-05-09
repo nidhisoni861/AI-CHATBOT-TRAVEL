@@ -14,7 +14,7 @@ class EventsService:
     """Service for local events using Ticketmaster API"""
     
     def __init__(self):
-        self.api_key = os.getenv("TICKETMASTER_API_KEY")
+        self.api_key = get_api_key("TICKETMASTER_API_KEY")
         self.base_url = "https://app.ticketmaster.com/discovery/v2"
         
         if not self.api_key:

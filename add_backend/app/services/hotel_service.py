@@ -10,7 +10,7 @@ class HotelService:
     """Service for hotel information using Booking.com API"""
     
     def __init__(self):
-        self.rapidapi_key = get_api_key()
+        self.rapidapi_key = get_api_key("RAPIDAPI_KEY")
         self.rapidapi_host = "booking-com15.p.rapidapi.com"
         self.rapidapi_host = os.getenv("RAPIDAPI_HOST", "booking-com15.p.rapidapi.com")
         self.base_url = f"https://{self.rapidapi_host}"
