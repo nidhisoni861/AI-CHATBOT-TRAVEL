@@ -373,49 +373,121 @@ def _format_api_context_compact(api_context: dict[str, Any]) -> str:
 def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
     max_items = _detect_max_itinerary(message)
     api_summary = _format_api_context_compact(api_context)
+    
+    # Detect which services are actually available
+    has_weather = bool(api_context.get("weather"))
+    has_flights = bool(api_context.get("flights"))
+    has_hotels = bool(api_context.get("hotels"))
+    has_events = bool(api_context.get("local_events"))
+    
+    # Build intent-aware prompt based on available services
+    if has_weather and not has_flights and not has_hotels and not has_events:
+        # Weather-only request
+        return (
+            "You are Wanderly weather assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            f"USER: {message}\n"
+            f"APIs: {api_summary}\n"
+            "You only output:\n"
+            '{"assistant_message":"Here is the current weather information for your requested location.",'
+            '"dashboard_payload":{'
+            '"intent":"weather_query",'
+            '"weather":{...weather_data...},'
+            '"flights":{"status":"unavailable"},'
+            '"hotels":{"status":"unavailable"},'
+            '"local_events":{"status":"unavailable"},'
+            '"itinerary":[],'
+            '"food_recommendations":[]'
+            '"dashboard_actions":["show_weather"],'
+            '"api_grounding":{"used_api":["weather"],"missing_api":[],"warnings":[]}'
+            "}}\n"
+        )
+    
+    elif has_flights and not has_weather and not has_hotels and not has_events:
+        # Flight-only request
+        return (
+            "You are Wanderly flight assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            f"USER: {message}\n"
+            f"APIs: {api_summary}\n"
+            "You only output:\n"
+            '{"assistant_message":"Here are the available flight options for your requested route.",'
+            '"dashboard_payload":{'
+            '"intent":"flight_search",'
+            '"weather":{"status":"unavailable"},'
+            '"flights":{...flight_data...},'
+            '"hotels":{"status":"unavailable"},'
+            '"local_events":{"status":"unavailable"},'
+            '"itinerary":[],'
+            '"food_recommendations":[]'
+            '"dashboard_actions":["show_flights"],'
+            '"api_grounding":{"used_api":["flights"],"missing_api":[],"warnings":[]}'
+            "}}\n"
+        )
+    
+    elif has_hotels and not has_weather and not has_flights and not has_events:
+        # Hotel-only request
+        return (
+            "You are Wanderly hotel assistant. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            f"USER: {message}\n"
+            f"APIs: {api_summary}\n"
+            "You only output:\n"
+            '{"assistant_message":"Here are the available hotel options for your requested destination.",'
+            '"dashboard_payload":{'
+            '"intent":"hotel_search",'
+            '"weather":{"status":"unavailable"},'
+            '"flights":{"status":"unavailable"},'
+            '"hotels":{...hotel_data...},'
+            '"local_events":{"status":"unavailable"},'
+            '"itinerary":[],'
+            '"food_recommendations":[]'
+            '"dashboard_actions":["show_hotels"],'
+            '"api_grounding":{"used_api":["hotels"],"missing_api":[],"warnings":[]}'
+            "}}\n"
+        )
+    
+    else:
+        # Multiple services or general request - use original itinerary logic
+        missing_apis: list[str] = []
+        if not api_context.get("flights"):
+            missing_apis.append("flights")
+        if not api_context.get("hotels"):
+            missing_apis.append("hotels")
+        if not api_context.get("weather"):
+            missing_apis.append("weather")
+        if not api_context.get("local_events"):
+            missing_apis.append("events")
 
-    missing_apis: list[str] = []
-    if not api_context.get("flights"):
-        missing_apis.append("flights")
-    if not api_context.get("hotels"):
-        missing_apis.append("hotels")
-    if not api_context.get("weather"):
-        missing_apis.append("weather")
-    if not api_context.get("local_events"):
-        missing_apis.append("events")
+        missing_note = (
+            f"Missing APIs: {', '.join(missing_apis)}. "
+            "Do NOT invent flights, hotels, weather, or events. Backend will keep those fields null/empty."
+            if missing_apis
+            else "All APIs available. Use API data."
+        )
 
-    missing_note = (
-        f"Missing APIs: {', '.join(missing_apis)}. "
-        "Do NOT invent flights, hotels, weather, or events. Backend will keep those fields null/empty."
-        if missing_apis
-        else "All APIs available. Use API data."
-    )
-
-    return (
-        "You are Wanderly. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
-        f"Max itinerary items: {max_items}. Max food_recommendations: 3. Max dashboard_actions: 3.\n"
-        f"{missing_note}\n"
-        "Rules:\n"
-        "- Do NOT repeat the same activity or location in the itinerary.\n"
-        "- food_recommendations must contain ONLY food, cafes, restaurants, markets, bakeries, street food, or local dishes.\n"
-        "- Do NOT put viewpoints, museums, transport, parks, gardens, castles, routes, areas, or attractions inside food_recommendations.\n"
-        "- Do NOT output root-level used_api, missing_api, or warnings. API metadata belongs ONLY inside dashboard_payload.api_grounding.\n"
-        "- assistant_message must say: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.\n"
-        "Backend handles: flight, stay_recommendations, weather, local_events, map_data, schema_version.\n"
-        "You only output:\n"
-        '{"assistant_message":"<2-sentence summary ending with: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.>",'
-        '"dashboard_payload":{'
-        '"intent":"itinerary_generation",'
-        '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"..."},'
-        '"food_recommendations":[{"name":"...","price_range":"..."}],'
-        '"itinerary":[{"day":1,"time":"Morning","activity":"...","budget_eur":0}],'
-        '"budget_breakdown":{"transport":"...","food":"...","activities":"...","total":"..."},'
-        '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
-        '"api_grounding":{"used_api":[],"missing_api":["flights","hotels","weather","events"],"warnings":[]}'
-        "}}\n\n"
-        f"USER: {message}\n"
-        f"APIs: {api_summary}"
-    )
+        return (
+            "You are Wanderly. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
+            f"Max itinerary items: {max_items}. Max food_recommendations: 3. Max dashboard_actions: 3.\n"
+            f"{missing_note}\n"
+            "Rules:\n"
+            "- Do NOT repeat the same activity or location in the itinerary.\n"
+            "- food_recommendations must contain ONLY food, cafes, restaurants, markets, bakeries, street food, or local dishes.\n"
+            "- Do NOT put viewpoints, museums, transport, parks, gardens, castles, routes, areas, or attractions inside food_recommendations.\n"
+            "- Do NOT output root-level used_api, missing_api, or warnings. API metadata belongs ONLY inside dashboard_payload.api_grounding.\n"
+            "- assistant_message must say: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.\n"
+            "Backend handles: flight, stay_recommendations, weather, local_events, map_data, schema_version.\n"
+            "You only output:\n"
+            '{"assistant_message":"<2-sentence summary ending with: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.>",'
+            '"dashboard_payload":{'
+            '"intent":"itinerary_generation",'
+            '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"..."},'
+            '"food_recommendations":[{"name":"...","price_range":"..."}],'
+            '"itinerary":[{"day":1,"time":"Morning","activity":"...","budget_eur":0}],'
+            '"budget_breakdown":{"transport":"...","food":"...","activities":"...","total":"..."},'
+            '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
+            '"api_grounding":{"used_api":[],"missing_api":["flights","hotels","weather","events"],"warnings":[]}'
+            "}}\n"
+            f"USER: {message}\n"
+            f"APIs: {api_summary}"
+        )
 
 
 def _build_retry_prompt(message: str, api_context: dict[str, Any]) -> str:
