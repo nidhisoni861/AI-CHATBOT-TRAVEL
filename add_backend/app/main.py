@@ -17,7 +17,7 @@ from add_backend.app.services.ai_model_service import preload_model, unload_mode
 
 def _load_backend_env() -> None:
     # Use centralized config loading
-    load_environment()
+    load_dotenv_and_get_env()
     return
 
 
