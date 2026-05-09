@@ -33,11 +33,9 @@ export default function Chatbot() {
   return (
     <div
       className="h-screen overflow-hidden flex flex-col items-center gap-3 px-4 py-4 sm:px-6 sm:py-5"
-      style={{
-        background:
-          "url('/bg.jpg') center/cover no-repeat, linear-gradient(135deg, #0891b2 0%, #22d3ee 18%, #6ee7b7 34%, #fde68a 52%, #fb923c 68%, #f43f5e 84%, #a855f7 100%)",
-      }}
+      style={{ background: "linear-gradient(135deg, #0d9488 0%, #2dd4bf 28%, #f9a8d4 62%, #fb923c 100%)" }}
     >
+      <div className="w-full flex flex-col items-center gap-3 h-full">
       {/* Project Title */}
       <div className="text-center flex-shrink-0">
         <h1
@@ -50,15 +48,15 @@ export default function Chatbot() {
           AI Travel Assistant Chatbot
         </h1>
         <p
-          className="title-animate mt-1 text-xs sm:text-sm font-semibold tracking-widest uppercase"
-          style={{ color: "rgba(255,255,255,0.5)", animationDelay: "0.3s" }}
+          className="subtitle-animate mt-1 text-xs sm:text-sm font-semibold tracking-widest uppercase"
+          style={{ color: "rgba(255,255,255,0.5)" }}
         >
           Powered by Roamora AI
         </p>
       </div>
 
       {/* White Chatbot Card — fills remaining height */}
-      <div className="bg-white/95 backdrop-blur-lg rounded-2xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-6xl shadow-2xl flex flex-col gap-4 flex-1 overflow-hidden">
+      <div className="card-animate bg-white/95 backdrop-blur-lg rounded-2xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-6xl shadow-2xl flex flex-col gap-4 flex-1 overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between flex-shrink-0">
@@ -127,6 +125,7 @@ export default function Chatbot() {
           </button>
         </div>
 
+      </div>
       </div>
     </div>
   );
