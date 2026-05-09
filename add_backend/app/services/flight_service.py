@@ -1,16 +1,16 @@
 """
-Flight service using external flight API
+Flight service using Flight API
 """
-import os
 import httpx
-from typing import Optional, List
 from add_backend.app.models.chat_models import FlightInfo
+from add_backend.app.core.config import get_api_key, is_service_enabled
 
 class FlightService:
     """Service for flight information"""
     
     def __init__(self):
-        self.api_key = os.getenv("FLIGHT_API_KEY")
+        self.api_key = get_api_key("FLIGHT_API_KEY")
+        self.enabled = is_service_enabled("FLIGHT_API_KEY")
         # Note: Replace with actual flight API URL
         self.base_url = "https://api.flightapi.io/comprehensive"  # Example API
         

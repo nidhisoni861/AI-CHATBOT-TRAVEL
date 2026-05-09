@@ -1,16 +1,17 @@
 """
-Hotel service using Booking.com API via RapidAPI
+Hotel service using Booking.com API
 """
-import os
 import httpx
 from typing import Optional, List
 from add_backend.app.models.chat_models import HotelInfo
+from add_backend.app.core.config import get_api_key, is_service_enabled
 
 class HotelService:
     """Service for hotel information using Booking.com API"""
     
     def __init__(self):
-        self.rapidapi_key = os.getenv("RAPIDAPI_KEY")
+        self.rapidapi_key = get_api_key()
+        self.rapidapi_host = "booking-com15.p.rapidapi.com"
         self.rapidapi_host = os.getenv("RAPIDAPI_HOST", "booking-com15.p.rapidapi.com")
         self.base_url = f"https://{self.rapidapi_host}"
         

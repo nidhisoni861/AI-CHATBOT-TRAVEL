@@ -6,6 +6,7 @@ import httpx
 import logging
 from typing import Optional, List
 from add_backend.app.models.chat_models import EventInfo
+from add_backend.app.core.config import get_api_key, is_service_enabled
 
 logger = logging.getLogger(__name__)
 

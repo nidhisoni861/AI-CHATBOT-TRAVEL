@@ -1,16 +1,15 @@
 """
 Weather service using OpenWeatherMap API
 """
-import os
 import httpx
-from typing import Optional
 from add_backend.app.models.chat_models import WeatherInfo
+from add_backend.app.core.config import get_api_key, is_service_enabled
 
 class WeatherService:
     """Service for weather information"""
     
     def __init__(self):
-        self.api_key = os.getenv("OPENWEATHERMAP_API_KEY")
+        self.api_key = get_api_key("OPENWEATHERMAP_API_KEY")
         self.base_url = "https://api.openweathermap.org/data/2.5"
         
         if not self.api_key:
