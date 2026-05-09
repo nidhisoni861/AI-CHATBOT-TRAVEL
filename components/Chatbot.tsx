@@ -382,7 +382,7 @@ export default function ChatBotPanel() {
       });
 
     setMessages((prev) => [
-      ...prev,
+      ...prev.filter((m) => m.id !== "init"),
       { id: `u-${Date.now()}`, role: "user", text: msg, time: now() },
     ]);
     setInput("");
@@ -504,14 +504,16 @@ export default function ChatBotPanel() {
                 />
               </div>
               <div className="min-w-0 max-w-[85%] flex-1 sm:max-w-[680px]">
-                <div className="rounded-[18px] rounded-tl-md bg-white px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.10)] sm:px-5 sm:py-4">
-                  <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
-                    {msg.text}
-                  </p>
-                  <p className="mt-2 text-right text-xs font-medium text-slate-400">
-                    {msg.time}
-                  </p>
-                </div>
+                {!msg.showDashboard && (
+                  <div className="rounded-[18px] rounded-tl-md bg-white px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.10)] sm:px-5 sm:py-4">
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+                      {msg.text}
+                    </p>
+                    <p className="mt-2 text-right text-xs font-medium text-slate-400">
+                      {msg.time}
+                    </p>
+                  </div>
+                )}
                 {msg.showDashboard && msg.dashboard && (
                   <DashboardCards payload={msg.dashboard} />
                 )}
