@@ -286,10 +286,19 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
     
     # Final intent-based response cleanup
-    intent = normalized["dashboard_payload"].get("intent", "")
+    normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
+
+def enforce_intent_specific_dashboard(payload: dict) -> dict:
+    """
+    Enforce strict intent-based dashboard payload cleanup
+    Removes all irrelevant fields based on detected intent
+    """
+    intent = payload.get("intent", "")
+    
     if intent == "weather_query":
-        # Weather-only response: remove all non-weather fields
-        normalized["dashboard_payload"].update({
+        # Weather-only response: keep only weather data
+        return {
+            **payload,  # Keep existing structure
             "food_recommendations": [],
             "itinerary": [],
             "budget_breakdown": None,
@@ -300,10 +309,11 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
                 "missing_api": [],
                 "warnings": []
             }
-        })
+        }
     elif intent == "flight_search":
-        # Flight-only response: remove all non-flight fields
-        normalized["dashboard_payload"].update({
+        # Flight-only response: keep only flights data
+        return {
+            **payload,  # Keep existing structure
             "food_recommendations": [],
             "itinerary": [],
             "budget_breakdown": None,
@@ -314,10 +324,11 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
                 "missing_api": [],
                 "warnings": []
             }
-        })
+        }
     elif intent == "hotel_search":
-        # Hotel-only response: remove all non-hotel fields
-        normalized["dashboard_payload"].update({
+        # Hotel-only response: keep only hotels data
+        return {
+            **payload,  # Keep existing structure
             "food_recommendations": [],
             "itinerary": [],
             "budget_breakdown": None,
@@ -328,7 +339,25 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
                 "missing_api": [],
                 "warnings": []
             }
-        })
+        }
+    elif intent == "events_search":
+        # Events-only response: keep only events data
+        return {
+            **payload,  # Keep existing structure
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": None,
+            "map_data": None,
+            "dashboard_actions": ["show_events"],
+            "api_grounding": {
+                "used_api": ["events"],
+                "missing_api": [],
+                "warnings": []
+            }
+        }
+    else:
+        # Multi-service or general request: keep full structure
+        return payload
 
     return ChatResponse(
         session_id=request.session_id,
