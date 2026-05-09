@@ -1,11 +1,21 @@
-import RouteCard from "@/src/features/chatbot/components/RouteCard";
+"use client";
+
+import { useEffect, useState } from "react";
 import ChatBotPanel from "@/src/features/chatbot/components/ChatBotPanel";
-import SavedTripsPanel from "@/src/features/chatbot/components/SavedTripsPanel";
 
 export default function HomePage() {
+  const [showChatbot, setShowChatbot] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setShowChatbot(true);
+    }, 1100);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-950 xl:h-screen xl:overflow-hidden">
-      {/* Background image */}
+    <main className="relative h-screen overflow-hidden bg-slate-950 text-slate-950">
       <div
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{
@@ -13,10 +23,8 @@ export default function HomePage() {
         }}
       />
 
-      {/* Soft overlay */}
-      <div className="absolute inset-0 z-[1] bg-gradient-to-r from-cyan-100/20 via-white/15 to-rose-200/20" />
+      <div className="absolute inset-0 z-[1] bg-gradient-to-r from-cyan-100/25 via-white/10 to-rose-200/25" />
 
-      {/* Decorative animation layer */}
       <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden">
         <div className="animate-float-slow absolute -left-16 top-10 h-72 w-72 rounded-full bg-pink-200/30 blur-3xl" />
         <div className="animate-float-medium absolute right-12 top-12 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl" />
@@ -36,18 +44,25 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Main UI */}
-      <section className="relative z-10 mx-auto grid min-h-screen w-full max-w-[1480px] grid-cols-1 items-center gap-5 px-5 py-6 sm:px-7 lg:px-8 xl:h-screen xl:min-h-0 xl:grid-cols-[320px_minmax(600px,760px)_320px] xl:gap-6 xl:py-5 2xl:max-w-[1540px] 2xl:grid-cols-[340px_minmax(660px,800px)_340px] 2xl:gap-8">
-        <div className="order-2 xl:order-1">
-          <RouteCard />
+      <section className="relative z-10 flex h-screen w-full flex-col items-center px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex h-[96px] shrink-0 flex-col items-center justify-center text-center sm:h-[110px]">
+          <h1 className="animate-title-reveal bg-gradient-to-r from-white via-yellow-100 to-white bg-clip-text text-4xl font-black tracking-[0.16em] text-transparent drop-shadow-[0_8px_24px_rgba(255,255,255,0.25)] sm:text-5xl lg:text-6xl">
+            AI Travel Assistant Chatbot
+          </h1>
+
+          <p className="animate-subtitle-reveal mt-2 text-xs font-extrabold uppercase tracking-[0.45em] text-white/70 sm:text-sm">
+            Powered by Roamora AI
+          </p>
         </div>
 
-        <div className="order-1 xl:order-2">
-          <ChatBotPanel />
-        </div>
-
-        <div className="order-3 xl:order-3">
-          <SavedTripsPanel />
+        <div
+          className={`flex min-h-0 w-full flex-1 items-center justify-center transition-all duration-700 ${
+            showChatbot
+              ? "translate-y-0 opacity-100"
+              : "translate-y-8 opacity-0"
+          }`}
+        >
+          {showChatbot && <ChatBotPanel />}
         </div>
       </section>
     </main>
