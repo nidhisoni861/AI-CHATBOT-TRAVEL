@@ -39,6 +39,7 @@ MISSING_API_ALIASES = {
     "event": "events",
     "events": "events",
     "event_api": "events",
+    # Note: stay_recommendations is excluded to prevent it from being treated as a missing API
     "local_event": "events",
     "local_events": "events",
 }
@@ -72,8 +73,8 @@ class DashboardPayload(BaseModel):
     schema_version: str
     intent: str
     trip_summary: dict[str, Any]
-    flight: Any | None
-    stay_recommendations: list[Any]
+    flight: Any | None = None
+    stay_recommendations: list[Any] = Field(default_factory=list)
     weather: Any = None
     flights: Any = Field(default_factory=list)
     hotels: Any = Field(default_factory=list)
@@ -395,27 +396,48 @@ def enforce_api_context_truth(
 
 
 def build_safe_fallback_response(warning: str | None = None) -> dict[str, Any]:
-    dashboard_payload = deepcopy(DEFAULT_DASHBOARD_PAYLOAD)
-    dashboard_payload.update(
-        {
-            "intent": "clarification_needed",
-            "dashboard_actions": ["ask_for_missing_trip_details"],
-            "api_grounding": {
-                "used_api": [],
-                "missing_api": ["flights", "hotels", "weather", "events"],
-                "warnings": [warning or "Model output could not be safely parsed."],
-            },
+    # Build canonical fallback response
+    dashboard_payload = {
+        "schema_version": "travel_dashboard_v1",
+        "intent": "clarification_needed",
+        "trip_summary": {
+            "destination": "Unknown",
+            "origin": "Berlin", 
+            "duration_days": 2,
+            "travelers": "solo",
+            "budget": "budget",
+            "currency": "EUR",
+            "source": "backend_extraction"
+        },
+        "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+        "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+        "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+        "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+        "food_recommendations": [],
+        "itinerary": [],
+        "budget_breakdown": {
+            "transport": "mock",
+            "food": "mock", 
+            "activities": "mock",
+            "total": "mock"
+        },
+        "dashboard_actions": ["ask_for_missing_trip_details"],
+        "itinerary_source": "model_generated",
+        "assistant_message_source": "model_generated",
+        "api_grounding": {
+            "used_api": [],
+            "missing_api": ["weather", "flights", "hotels", "events"],
+            "warnings": [warning or "Model output could not be safely parsed."],
         }
-    )
-    return validate_normalized_response(
-        {
-            "assistant_message": (
-                "I could not safely generate a complete structured trip plan. "
-                "Please try again with destination, dates, budget, and preferences."
-            ),
-            "dashboard_payload": dashboard_payload,
-        }
-    )
+    }
+    
+    return {
+        "assistant_message": (
+            "I could not safely generate a complete structured trip plan. "
+            "Please try again with destination, dates, budget, and preferences."
+        ),
+        "dashboard_payload": dashboard_payload
+    }
 
 
 def validate_normalized_response(payload: dict[str, Any]) -> dict[str, Any]:
@@ -423,10 +445,31 @@ def validate_normalized_response(payload: dict[str, Any]) -> dict[str, Any]:
     dashboard_payload = payload.get("dashboard_payload", {})
     
     # Normalize weather, flights, hotels, local_events to canonical structure
-    dashboard_payload["weather"] = _normalize_live_api_section(dashboard_payload.get("weather"), None)
-    dashboard_payload["flights"] = _normalize_live_api_section(dashboard_payload.get("flights"), [])
-    dashboard_payload["hotels"] = _normalize_live_api_section(dashboard_payload.get("hotels"), [])
-    dashboard_payload["local_events"] = _normalize_live_api_section(dashboard_payload.get("local_events"), [])
+    # Handle both canonical fields and legacy fields for backward compatibility
+    weather_data = (
+        dashboard_payload.get("weather") or 
+        dashboard_payload.get("weather_data")
+    )
+    flights_data = (
+        dashboard_payload.get("flights") or 
+        dashboard_payload.get("flight_options") or 
+        dashboard_payload.get("flight")
+    )
+    hotels_data = (
+        dashboard_payload.get("hotels") or 
+        dashboard_payload.get("hotel_options") or 
+        dashboard_payload.get("stay_recommendations")
+    )
+    local_events_data = (
+        dashboard_payload.get("local_events") or 
+        dashboard_payload.get("events")
+    )
+    
+    # Create canonical structure
+    dashboard_payload["weather"] = _normalize_live_api_section(weather_data, None)
+    dashboard_payload["flights"] = _normalize_live_api_section(flights_data, [])
+    dashboard_payload["hotels"] = _normalize_live_api_section(hotels_data, [])
+    dashboard_payload["local_events"] = _normalize_live_api_section(local_events_data, [])
     
     # Remove legacy duplicate fields
     _remove_legacy_duplicate_fields(dashboard_payload)
