@@ -211,6 +211,351 @@ Model list:
 http://127.0.0.1:9000/models
 ```
 
+---
+
+## New Teammate Setup: End-to-End Backend Run
+
+These steps are for a new developer who cloned branch for the first time.
+
+### 1. Clone repository
+
+```powershell
+git clone https://github.com/nidhisoni861/AI-CHATBOT-TRAVEL.git
+cd AI-CHATBOT-TRAVEL
+git checkout backend-finetune-integration
+git pull origin backend-finetune-integration
+```
+
+### 2. Required installations
+
+Install these before running the backend:
+
+```text
+Python 3.11
+Git
+NVIDIA driver + CUDA-compatible GPU, only required for real model testing
+Hugging Face account + access token
+Live API keys if testing live services
+```
+
+Check Python:
+
+```powershell
+python --version
+```
+
+Expected:
+
+```text
+Python 3.11.x
+```
+
+If multiple Python versions exist, use:
+
+```powershell
+py -3.11 --version
+```
+
+### 3. Create Python virtual environment
+
+From project root:
+
+```powershell
+py -3.11 -m venv backend_fine_tuning\.venv
+.\backend_fine_tuning\.venv\Scripts\Activate.ps1
+python --version
+```
+
+If PowerShell blocks activation:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\backend_fine_tuning\.venv\Scripts\Activate.ps1
+```
+
+### 4. Install backend dependencies
+
+```powershell
+python -m pip install --upgrade pip
+pip install -r backend_fine_tuning\requirements.txt
+```
+
+### 5. Install PyTorch
+
+For NVIDIA GPU / CUDA 12.4 compatible setup:
+
+```powershell
+pip uninstall -y torch torchvision torchaudio
+pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+Then install/upgrade model libraries:
+
+```powershell
+pip install -U transformers accelerate peft bitsandbytes sentencepiece protobuf safetensors huggingface_hub
+```
+
+For CPU-only or frontend/mock testing, CUDA PyTorch is not required, but real model loading will be very slow or may fail.
+
+### 6. Verify GPU and CUDA
+
+```powershell
+nvidia-smi
+```
+
+Then:
+
+```powershell
+python -c "import torch; print(torch.__version__); print('CUDA:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU detected')"
+```
+
+For real fine-tuned model testing, 8 GB+ VRAM is recommended, and 12 GB+ is better.
+
+For laptops with 4 GB VRAM, use mock mode.
+
+### 7. Configure local environment file
+
+Create:
+
+```text
+backend_fine_tuning/.env
+```
+
+You can copy from example:
+
+```powershell
+Copy-Item backend_fine_tuning\.env.example backend_fine_tuning\.env
+```
+
+Then edit:
+
+```powershell
+notepad backend_fine_tuning\.env
+```
+
+Required model variables:
+
+```env
+HF_TOKEN=your_huggingface_token
+BASE_MODEL_ID=unsloth/Llama-3.2-3B-Instruct
+ADAPTER_REPO_ID=Naman-1718/wanderly-training-backup
+ADAPTER_REPO_TYPE=dataset
+ADAPTER_SUBFOLDER=wanderly-3b-lora/checkpoint-1952
+LOCAL_ADAPTER_PATH=
+MODEL_TEMPERATURE=0.0
+MODEL_MAX_INPUT_TOKENS=2000
+MODEL_MAX_NEW_TOKENS=2200
+BACKEND_PRELOAD_MODEL=none
+```
+
+Live API variables:
+
+```env
+OPENWEATHERMAP_API_KEY=your_key
+FLIGHT_API_KEY=your_key
+RAPIDAPI_KEY=your_key
+TICKETMASTER_API_KEY=your_key
+```
+
+Important:
+
+```text
+Do not commit .env
+Do not expose HF_TOKEN or API keys
+Keep .env local only
+```
+
+### 8. Optional: Set Hugging Face cache to D drive
+
+Recommended if C drive has limited space:
+
+```powershell
+mkdir D:\AI_cache\huggingface
+mkdir D:\AI_cache\torch
+setx HF_HOME "D:\AI_cache\huggingface"
+setx TORCH_HOME "D:\AI_cache\torch"
+```
+
+Close and reopen terminal after `setx`.
+
+For current terminal only:
+
+```powershell
+$env:HF_HOME="D:\AI_cache\huggingface"
+$env:TORCH_HOME="D:\AI_cache\torch"
+```
+
+### 9. Run syntax check
+
+```powershell
+python -m compileall add_backend backend_fine_tuning
+```
+
+Expected:
+
+```text
+No syntax errors
+```
+
+### 10. Run backend in local mock mode
+
+Use this for frontend testing or laptops with limited GPU memory:
+
+```powershell
+$env:BACKEND_PRELOAD_MODEL="none"
+$env:WANDERLY_MOCK_MODEL="true"
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+```
+
+Open:
+
+```text
+http://127.0.0.1:9000/health
+http://127.0.0.1:9000/docs
+```
+
+In mock mode:
+
+```text
+/chat works without loading the real model
+assistant_message_source = mock_model
+live API orchestration can still be tested
+```
+
+### 11. Run backend with real fine-tuned model on stronger GPU
+
+Recommended first run: lazy loading.
+
+```powershell
+$env:BACKEND_PRELOAD_MODEL="none"
+$env:WANDERLY_MOCK_MODEL="false"
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+```
+
+Then open:
+
+```text
+http://127.0.0.1:9000/docs
+```
+
+Test:
+
+```json
+{
+  "session_id": "test-1",
+  "message": "Plan a 3-day budget trip from Stuttgart to Heidelberg",
+  "model_variant": "fine_tuned"
+}
+```
+
+Expected if model loads correctly:
+
+```json
+{
+  "selected_model": "fine_tuned",
+  "adapter_loaded": true,
+  "dashboard_payload": {
+    "assistant_message_source": "fine_tuned_model"
+  }
+}
+```
+
+### 12. Optional: Preload fine-tuned model at startup
+
+Only use this on a machine with enough GPU memory:
+
+```powershell
+$env:BACKEND_PRELOAD_MODEL="fine_tuned"
+$env:WANDERLY_MOCK_MODEL="false"
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+```
+
+### 13. Main frontend API
+
+Frontend should call only:
+
+```text
+POST http://127.0.0.1:9000/chat
+```
+
+Example request:
+
+```json
+{
+  "session_id": "user-1",
+  "message": "Plan a 3-day budget trip from Stuttgart to Heidelberg",
+  "model_variant": "fine_tuned"
+}
+```
+
+For mock testing:
+
+```json
+{
+  "session_id": "user-1",
+  "message": "Plan a 3-day budget trip from Stuttgart to Heidelberg",
+  "model_variant": "base"
+}
+```
+
+### 14. Expected response structure
+
+```text
+assistant_message
+dashboard_payload
+trip_summary
+weather
+flights
+hotels
+local_events
+itinerary
+budget_breakdown
+api_grounding
+```
+
+Frontend can identify sources using:
+
+```text
+trip_summary.source = backend_extraction
+weather/flights/hotels/local_events.source = live_api
+weather/flights/hotels/local_events.status = available / unavailable / missing_api_key
+assistant_message_source = mock_model / base_model / fine_tuned_model
+itinerary_source = model_generated
+api_grounding.used_api = APIs that returned usable data
+api_grounding.missing_api = APIs unavailable or missing
+```
+
+### 15. Troubleshooting
+
+If port 9000 is busy:
+
+```powershell
+netstat -ano | findstr :9000
+taskkill /PID <PID> /F
+```
+
+Or run on another port:
+
+```powershell
+python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9001
+```
+
+If model downloads again, check:
+
+```powershell
+echo $env:HF_HOME
+```
+
+If `.env` is not loading, confirm:
+
+```powershell
+Get-ChildItem backend_fine_tuning\.env -Force
+```
+
+If Swagger `/chat` sends empty body, confirm POST `/chat` shows `ChatRequest` schema in `/docs`.
+
+---
+
 ## API Endpoints
 
 ### `GET /health`
