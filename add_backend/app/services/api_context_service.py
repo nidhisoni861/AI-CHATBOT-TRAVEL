@@ -27,23 +27,89 @@ class ApiContextService:
 
     def extract_travel_info(self, message: str) -> Dict[str, Any]:
         """Extract travel information from user message"""
-        # Extract destination cities
-        destinations = []
-        # Common city names (simplified)
+        message_lower = message.lower()
+        
+        # Extended city list including German cities
         cities = [
-            "stuttgart", "berlin", "munich", "hamburg", "frankfurt", "cologne",
-            "paris", "london", "rome", "madrid", "amsterdam", "vienna",
-            "prague", "budapest", "warsaw", "zurich", "barcelona"
+            "stuttgart", "berlin", "munich", "hamburg", "frankfurt", "cologne", "düsseldorf",
+            "heidelberg", "bonn", "leipzig", "dresden", "nuremberg", "bremen", "hannover",
+            "paris", "london", "rome", "madrid", "amsterdam", "vienna", "brussels",
+            "prague", "budapest", "warsaw", "zurich", "barcelona", "milan", "lisbon"
         ]
         
-        message_lower = message.lower()
+        # Find all cities mentioned in order of appearance
+        found_cities = []
         for city in cities:
             if city in message_lower:
-                destinations.append(city.title())
+                # Find position to maintain order
+                start_pos = message_lower.find(city)
+                found_cities.append((start_pos, city.title()))
         
-        # Extract duration
-        duration_match = re.search(r'(\d+)\s*[- ]?\s*day', message_lower)
-        duration_days = int(duration_match.group(1)) if duration_match else 2
+        # Sort by position in message
+        found_cities.sort(key=lambda x: x[0])
+        cities_mentioned = [city for _, city in found_cities]
+        
+        # Extract duration with more patterns
+        duration_patterns = [
+            r'(\d+)\s*[- ]?\s*day',
+            r'(\d+)\s*[- ]?\s*days?',
+            r'weekend',  # Special case for weekend trips
+            r'(\d+)\s*[- ]?\s*night'
+        ]
+        
+        duration_days = 2  # default
+        for pattern in duration_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                if pattern == r'weekend':
+                    duration_days = 2
+                else:
+                    duration_days = int(match.group(1))
+                break
+        
+        # Extract budget style
+        budget_keywords = {
+            "budget": ["budget", "cheap", "affordable", "low cost", "economy"],
+            "mid": ["moderate", "mid-range", "reasonable", "standard"],
+            "luxury": ["luxury", "premium", "high-end", "expensive", "deluxe"]
+        }
+        
+        detected_budget = "budget"  # default
+        for budget_type, keywords in budget_keywords.items():
+            if any(keyword in message_lower for keyword in keywords):
+                detected_budget = budget_type
+                break
+        
+        # Determine origin and destination based on context
+        origin = None
+        destination = None
+        
+        if len(cities_mentioned) == 1:
+            # Single city - assume it's the destination
+            destination = cities_mentioned[0]
+            origin = "Berlin"  # Default origin for German context
+        elif len(cities_mentioned) >= 2:
+            # Multiple cities - look for "from/to" patterns
+            from_match = re.search(r'from\s+(\w+)', message_lower)
+            to_match = re.search(r'to\s+(\w+)', message_lower)
+            
+            if from_match and to_match:
+                from_city = from_match.group(1).title()
+                to_city = to_match.group(1).title()
+                
+                # Find matching cities in our list
+                origin = next((city for city in cities_mentioned if from_city in city), cities_mentioned[0])
+                destination = next((city for city in cities_mentioned if to_city in city), cities_mentioned[-1])
+            else:
+                # Default: first city is origin, last is destination
+                origin = cities_mentioned[0]
+                destination = cities_mentioned[-1]
+        
+        # Fallbacks if still not found
+        if not destination:
+            destination = "Unknown"
+        if not origin:
+            origin = "Berlin"
         
         # Extract dates (simplified - look for YYYY-MM-DD or common patterns)
         today = datetime.now()
@@ -58,10 +124,6 @@ class ApiContextService:
         if duration_days > 1:
             return_date = (today + timedelta(days=duration_days)).strftime('%Y-%m-%d')
         
-        # Extract origin (first city mentioned for round trips)
-        origin = destinations[0] if len(destinations) > 1 else "Berlin"
-        destination = destinations[-1] if destinations else "Stuttgart"
-        
         return {
             "origin": origin,
             "destination": destination,
@@ -70,7 +132,8 @@ class ApiContextService:
             "duration_days": duration_days,
             "check_in": departure_date,
             "check_out": return_date or (today + timedelta(days=duration_days + 1)).strftime('%Y-%m-%d'),
-            "guests": 2  # Default assumption
+            "guests": 2,  # Default assumption
+            "budget": detected_budget
         }
 
     async def build_api_context_from_message(
@@ -106,7 +169,8 @@ class ApiContextService:
             "local_events": [],
             "warnings": [],
             "used_apis": [],
-            "missing_apis": []
+            "missing_apis": [],
+            "travel_info": travel_info  # Include extracted travel information
         }
         
         # Try to fetch weather

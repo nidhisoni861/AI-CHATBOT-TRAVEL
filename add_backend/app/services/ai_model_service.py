@@ -103,17 +103,19 @@ def unload_models() -> None:
 
 def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
     """Build a mock response for testing orchestration without loading models"""
-    # Extract destination from message or context
-    destination = "Unknown"
-    if api_context.get("local_events"):
-        destination = api_context["local_events"][0].get("city", "Stuttgart")
+    # Extract travel information from api_context (populated by API context service)
+    travel_info = api_context.get("travel_info", {})
     
-    # Extract duration from message
-    duration = 2
-    import re
-    duration_match = re.search(r'(\d+)\s*[- ]?\s*day', request.message.lower())
-    if duration_match:
-        duration = int(duration_match.group(1))
+    destination = travel_info.get("destination", "Unknown")
+    duration = travel_info.get("duration_days", 2)
+    budget = travel_info.get("budget", "budget")
+    origin = travel_info.get("origin", "Berlin")
+    
+    # Build descriptive message
+    if origin != "Berlin":
+        travel_desc = f"{duration}-day trip from {origin} to {destination}"
+    else:
+        travel_desc = f"{duration}-day trip to {destination}"
     
     return ChatResponse(
         session_id=request.session_id,
@@ -122,14 +124,15 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
         parse_success=True,
         fallback_used=False,
         retry_used=False,
-        assistant_message=f"Mock response: API context orchestration completed successfully for {duration}-day trip to {destination}.",
+        assistant_message=f"Mock response: API context orchestration completed successfully for {travel_desc}.",
         dashboard_payload={
             "intent": "itinerary_generation",
             "trip_summary": {
                 "destination": destination,
                 "duration_days": duration,
                 "travelers": "solo",
-                "budget": "budget"
+                "budget": budget,
+                "origin": origin
             },
             "food_recommendations": [],
             "itinerary": [],
