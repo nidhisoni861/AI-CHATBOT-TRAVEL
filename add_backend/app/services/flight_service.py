@@ -2,6 +2,7 @@
 Flight service using Flight API
 """
 import httpx
+from typing import Optional, List
 from add_backend.app.models.chat_models import FlightInfo
 from add_backend.app.core.config import get_api_key, is_service_enabled
 
