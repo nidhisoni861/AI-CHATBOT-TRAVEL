@@ -201,7 +201,7 @@ class ApiContextService:
         try:
             weather = await self.weather_service.get_current_weather(travel_info["destination"])
             if weather:
-                enriched_context["weather"] = weather
+                enriched_context["weather"] = weather.dict() if hasattr(weather, 'dict') else weather
                 enriched_context["used_apis"].append("weather")
             else:
                 enriched_context["warnings"].append("Weather service unavailable - API key missing")
@@ -219,7 +219,7 @@ class ApiContextService:
                 travel_info["return_date"]
             )
             if flights:
-                enriched_context["flights"] = flights
+                enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
                 enriched_context["used_apis"].append("flights")
             else:
                 enriched_context["warnings"].append("No flights found or API unavailable")
@@ -237,7 +237,7 @@ class ApiContextService:
                 travel_info["guests"]
             )
             if hotels:
-                enriched_context["hotels"] = hotels
+                enriched_context["hotels"] = [hotel.dict() if hasattr(hotel, 'dict') else hotel for hotel in hotels]
                 enriched_context["used_apis"].append("hotels")
             else:
                 enriched_context["warnings"].append("No hotels found or API unavailable")
@@ -254,7 +254,7 @@ class ApiContextService:
                 travel_info["return_date"]
             )
             if events:
-                enriched_context["local_events"] = events
+                enriched_context["local_events"] = [event.dict() if hasattr(event, 'dict') else event for event in events]
                 enriched_context["used_apis"].append("events")
             else:
                 enriched_context["warnings"].append("No events found or API unavailable")
