@@ -56,7 +56,12 @@ export default function Chatbot() {
       </div>
 
       {/* White Chatbot Card — fills remaining height */}
-      <div className="card-animate bg-white/95 backdrop-blur-lg rounded-2xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-6xl shadow-2xl flex flex-col gap-4 flex-1 overflow-hidden">
+      <div className="card-animate backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-6xl flex flex-col gap-4 flex-1 overflow-hidden"
+        style={{
+          background: "rgba(255, 255, 255, 0.68)",
+          border: "1px solid rgba(255, 255, 255, 0.8)",
+          boxShadow: "0 8px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)",
+        }}>
 
         {/* Header */}
         <div className="flex items-center justify-between flex-shrink-0">
@@ -64,11 +69,11 @@ export default function Chatbot() {
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
               Roamora AI <span className="text-teal-500">✦</span>
             </h2>
-            <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Your intelligent travel companion</p>
+            <p className="text-gray-600 text-xs sm:text-sm mt-0.5">Your intelligent travel companion</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-gray-500 hidden sm:flex"><MicIcon size={15} /></span>
-            <span className="text-gray-600 text-sm font-medium">Voice</span>
+            <span className="text-gray-600 hidden sm:flex"><MicIcon size={15} /></span>
+            <span className="text-gray-700 text-sm font-medium">Voice</span>
             <button
               onClick={() => setVoice(!voice)}
               aria-label="toggle voice"
@@ -77,16 +82,16 @@ export default function Chatbot() {
             >
               <span className={`absolute top-[3px] left-[3px] w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${voice ? "translate-x-[22px]" : "translate-x-0"}`} />
             </button>
-            <span className="text-sm font-semibold" style={{ minWidth: "28px", color: voice ? "#14b8a6" : "#9ca3af" }}>
+            <span className="text-sm font-semibold" style={{ minWidth: "28px", color: voice ? "#0d9488" : "#9ca3af" }}>
               {voice ? "On" : "Off"}
             </span>
           </div>
         </div>
 
         {/* AI Message Bubble */}
-        <div className="bg-gray-50 rounded-2xl p-4 sm:p-5 border border-gray-100 flex-shrink-0">
+        <div className="rounded-2xl p-4 sm:p-5 flex-shrink-0" style={{ background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.6)" }}>
           <p className="font-bold text-gray-900 text-sm sm:text-base mb-1">Hello! 👋 I&apos;m Roamora AI</p>
-          <p className="text-gray-600 text-xs sm:text-sm leading-relaxed">
+          <p className="text-gray-700 text-xs sm:text-sm leading-relaxed">
             Tell me your destination, travel dates, budget, and travel style. I&apos;ll build your trip plan.
           </p>
           <p className="text-right text-xs text-gray-400 mt-2 sm:mt-3">11:19</p>
@@ -94,13 +99,14 @@ export default function Chatbot() {
 
         {/* Suggestions — flex-1 fills leftover space */}
         <div className="flex-1 flex flex-col justify-center">
-          <p className="text-center text-gray-400 text-xs sm:text-sm mb-3">✦ Try asking me: ✦</p>
+          <p className="text-center text-gray-500 text-xs sm:text-sm mb-3">✦ Try asking me: ✦</p>
           <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
             {suggestions.map((s, i) => (
               <button
                 key={i}
                 onClick={() => setInput(s.text)}
-                className="flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full border border-gray-200 bg-white text-xs sm:text-sm text-gray-700 hover:border-teal-400 hover:text-teal-600 hover:shadow-sm transition-all"
+                className="flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm text-gray-700 hover:scale-105 transition-all"
+                style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.7)" }}
               >
                 <span>{s.icon}</span> {s.text}
               </button>
@@ -109,7 +115,7 @@ export default function Chatbot() {
         </div>
 
         {/* Input Bar */}
-        <div className="bg-gray-50 rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 px-4 py-3 border border-gray-100 flex-shrink-0">
+        <div className="rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 px-4 py-3 flex-shrink-0" style={{ background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.6)" }}>
           <button className="text-gray-400 hover:text-gray-600 text-xl font-light leading-none">+</button>
           <input
             value={input}
