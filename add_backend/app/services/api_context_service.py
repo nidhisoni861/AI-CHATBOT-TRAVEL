@@ -197,11 +197,22 @@ class ApiContextService:
             "festival", "show", "entertainment", "tour", "sightseeing"
         ]
         
-        # Detect intents
-        intent["flights"] = any(keyword in message_lower for keyword in flight_keywords)
-        intent["hotels"] = any(keyword in message_lower for keyword in hotel_keywords)
-        intent["weather"] = any(keyword in message_lower for keyword in weather_keywords)
-        intent["events"] = any(keyword in message_lower for keyword in events_keywords)
+        # Detect intents with priority order
+        weather_detected = any(keyword in message_lower for keyword in weather_keywords)
+        flight_detected = any(keyword in message_lower for keyword in flight_keywords)
+        hotel_detected = any(keyword in message_lower for keyword in hotel_keywords)
+        events_detected = any(keyword in message_lower for keyword in events_keywords)
+        
+        # Set intents
+        intent["weather"] = weather_detected
+        intent["hotels"] = hotel_detected
+        intent["events"] = events_detected
+        
+        # Only set flights intent if explicitly requested AND no other higher priority intent detected
+        if flight_detected and not weather_detected and not hotel_detected and not events_detected:
+            intent["flights"] = True
+        else:
+            intent["flights"] = False
         
         # Special case: if no specific intent detected, assume general travel (flights)
         if not any(intent.values()):
