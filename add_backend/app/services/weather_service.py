@@ -14,7 +14,8 @@ class WeatherService:
         self.base_url = "https://api.openweathermap.org/data/2.5"
         
         if not self.api_key:
-            print("Warning: OPENWEATHERMAP_API_KEY not found. Weather service will be disabled.")
+            print("[WARNING] OPENWEATHERMAP_API_KEY not found. Weather service will be disabled.")
+            print("[INFO] Weather service will return None for all requests.")
     
     async def get_current_weather(self, city: str) -> Optional[WeatherInfo]:
         """

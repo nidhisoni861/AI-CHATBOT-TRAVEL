@@ -16,12 +16,35 @@ from add_backend.app.services.ai_model_service import preload_model, unload_mode
 def _load_backend_env() -> None:
     try:
         from dotenv import load_dotenv
-    except ImportError:
+        print("[DEBUG] Loading environment variables...")
+    except ImportError as e:
+        print(f"[ERROR] Failed to import dotenv: {e}")
         return
 
+    # Try to load .env file
     project_root = Path(__file__).resolve().parents[2]
-    load_dotenv(project_root / "backend_fine_tuning" / ".env", override=False)
-    load_dotenv(project_root / "backend_fine_tuning" / ".env.example", override=False)
+    env_path = project_root / "backend_fine_tuning" / ".env"
+    
+    if env_path.exists():
+        print(f"[DEBUG] Loading .env from: {env_path}")
+        load_dotenv(env_path, override=False)
+        load_dotenv(project_root / "backend_fine_tuning" / ".env.example", override=False)
+    else:
+        print(f"[WARNING] .env file not found at: {env_path}")
+        # Still try to load from project root as fallback
+        load_dotenv(project_root / ".env", override=False)
+        load_dotenv(project_root / "backend_fine_tuning" / ".env.example", override=False)
+    
+    # Check which API keys are loaded
+    api_keys_loaded = {
+        "OPENWEATHERMAP_API_KEY": bool(os.getenv("OPENWEATHERMAP_API_KEY")),
+        "FLIGHT_API_KEY": bool(os.getenv("FLIGHT_API_KEY")),
+        "RAPIDAPI_KEY": bool(os.getenv("RAPIDAPI_KEY")),
+        "TICKETMASTER_API_KEY": bool(os.getenv("TICKETMASTER_API_KEY"))
+    }
+    
+    print(f"[DEBUG] API Keys Status: {api_keys_loaded}")
+    return
 
 
 @asynccontextmanager
