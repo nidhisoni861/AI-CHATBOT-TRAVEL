@@ -284,6 +284,51 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     # Update assistant_message_source in dashboard_payload
     normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
+    
+    # Final intent-based response cleanup
+    intent = normalized["dashboard_payload"].get("intent", "")
+    if intent == "weather_query":
+        # Weather-only response: remove all non-weather fields
+        normalized["dashboard_payload"].update({
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": None,
+            "map_data": None,
+            "dashboard_actions": ["show_weather"],
+            "api_grounding": {
+                "used_api": ["weather"],
+                "missing_api": [],
+                "warnings": []
+            }
+        })
+    elif intent == "flight_search":
+        # Flight-only response: remove all non-flight fields
+        normalized["dashboard_payload"].update({
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": None,
+            "map_data": None,
+            "dashboard_actions": ["show_flights"],
+            "api_grounding": {
+                "used_api": ["flights"],
+                "missing_api": [],
+                "warnings": []
+            }
+        })
+    elif intent == "hotel_search":
+        # Hotel-only response: remove all non-hotel fields
+        normalized["dashboard_payload"].update({
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": None,
+            "map_data": None,
+            "dashboard_actions": ["show_hotels"],
+            "api_grounding": {
+                "used_api": ["hotels"],
+                "missing_api": [],
+                "warnings": []
+            }
+        })
 
     return ChatResponse(
         session_id=request.session_id,
