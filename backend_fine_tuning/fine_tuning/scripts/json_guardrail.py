@@ -74,8 +74,10 @@ class DashboardPayload(BaseModel):
     trip_summary: dict[str, Any]
     flight: Any | None
     stay_recommendations: list[Any]
-    weather: Any | None
-    local_events: list[Any]
+    weather: Any = None
+    flights: Any = Field(default_factory=list)
+    hotels: Any = Field(default_factory=list)
+    local_events: Any = Field(default_factory=list)
     food_recommendations: list[Any]
     itinerary: list[Any]
     map_data: dict[str, Any]
@@ -417,7 +419,23 @@ def build_safe_fallback_response(warning: str | None = None) -> dict[str, Any]:
 
 
 def validate_normalized_response(payload: dict[str, Any]) -> dict[str, Any]:
-    validated = ModelDashboardResponse.model_validate(payload)
+    # Normalize live API sections to canonical structure before validation
+    dashboard_payload = payload.get("dashboard_payload", {})
+    
+    # Normalize weather, flights, hotels, local_events to canonical structure
+    dashboard_payload["weather"] = _normalize_live_api_section(dashboard_payload.get("weather"), None)
+    dashboard_payload["flights"] = _normalize_live_api_section(dashboard_payload.get("flights"), [])
+    dashboard_payload["hotels"] = _normalize_live_api_section(dashboard_payload.get("hotels"), [])
+    dashboard_payload["local_events"] = _normalize_live_api_section(dashboard_payload.get("local_events"), [])
+    
+    # Remove legacy duplicate fields
+    _remove_legacy_duplicate_fields(dashboard_payload)
+    
+    # Validate with Pydantic model
+    validated = ModelDashboardResponse.model_validate({
+        "assistant_message": payload.get("assistant_message", ""),
+        "dashboard_payload": dashboard_payload
+    })
     return validated.model_dump(mode="python")
 
 
@@ -548,20 +566,9 @@ def _normalize_api_grounding(dashboard_payload: dict[str, Any]) -> None:
 
 
 def _force_unavailable_api_fields(dashboard_payload: dict[str, Any]) -> None:
-    missing_api = set(dashboard_payload["api_grounding"]["missing_api"])
-
-    if "flights" in missing_api:
-        dashboard_payload["flight"] = None
-        dashboard_payload["flight_options"] = []
-    if "hotels" in missing_api:
-        dashboard_payload["stay_recommendations"] = []
-        dashboard_payload["hotel_options"] = []
-    if "weather" in missing_api:
-        dashboard_payload["weather"] = None
-        dashboard_payload["weather_data"] = None
-    if "events" in missing_api or "local_events" in missing_api:
-        dashboard_payload["local_events"] = []
-        dashboard_payload["events"] = []
+    # This function is deprecated - legacy fields are now handled by _remove_legacy_duplicate_fields
+    # Keeping function for backward compatibility but it no longer creates legacy fields
+    pass
 
 
 _ALLOWED_TRIP_SUMMARY_KEYS = frozenset({
@@ -842,6 +849,42 @@ def _filter_non_food_recommendations(
 
 
 _REAL_APIS = frozenset({"flights", "hotels", "weather", "events", "local_events"})
+
+
+def _normalize_live_api_section(value: Any, default_data: Any) -> dict[str, Any]:
+    """Normalize live API section to canonical structure with data/source/status."""
+    if isinstance(value, dict) and "data" in value:
+        data = value.get("data")
+        if data is None:
+            data = default_data
+        status = value.get("status")
+        return {
+            "data": data,
+            "source": "live_api",
+            "status": status or ("available" if _has_live_data(data) else "unavailable"),
+        }
+
+    data = value if value is not None else default_data
+    return {
+        "data": data,
+        "source": "live_api",
+        "status": "available" if _has_live_data(data) else "unavailable",
+    }
+
+
+def _remove_legacy_duplicate_fields(dashboard_payload: dict[str, Any]) -> None:
+    """Remove legacy duplicate fields from final response."""
+    # Remove legacy fields that should not appear in final response
+    legacy_fields = [
+        "flight",
+        "flight_options", 
+        "stay_recommendations",
+        "hotel_options",
+        "weather_data",
+        "events",
+    ]
+    for field in legacy_fields:
+        dashboard_payload.pop(field, None)
 
 
 def _strip_root_api_fields(dashboard_payload: dict[str, Any]) -> None:
