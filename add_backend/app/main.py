@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from add_backend.app.routes.chat_router import router as chat_router
 from add_backend.app.routes.model_test_router import router as model_test_router
+from add_backend.app.routes.api_services_router import router as api_services_router
 from add_backend.app.services.ai_model_service import preload_model, unload_models
 
 
@@ -55,6 +56,7 @@ app.add_middleware(
 
 app.include_router(chat_router)
 app.include_router(model_test_router, prefix="/api")
+app.include_router(api_services_router, prefix="/api")
 
 
 @app.get("/health")
