@@ -1,6 +1,7 @@
 """
 Hotel service using Booking.com API
 """
+import os
 import httpx
 from typing import Optional, List
 from add_backend.app.models.chat_models import HotelInfo
