@@ -144,6 +144,7 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
         retry_used=False,
         assistant_message=f"Mock response: API context orchestration completed successfully for {travel_desc}.",
         dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
             "intent": "itinerary_generation",
             "trip_summary": {
                 "destination": destination,
@@ -151,6 +152,7 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
                 "travelers": "solo",
                 "budget": budget,
                 "origin": origin,
+                "currency": "EUR",
                 "source": "backend_extraction"
             },
             "weather": {

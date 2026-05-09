@@ -337,46 +337,49 @@ def enforce_api_context_truth(
             "duration_days": dashboard_payload["trip_summary"].get("duration_days", travel_info.get("duration_days", 2)),
             "origin": dashboard_payload["trip_summary"].get("origin", travel_info.get("origin", "Berlin")),
             "budget": dashboard_payload["trip_summary"].get("budget", travel_info.get("budget", "budget")),
+            "currency": "EUR",  # Standardize currency for European context
         })
+
+    # Add schema version for frontend compatibility
+    dashboard_payload["schema_version"] = "travel_dashboard_v1"
 
     # Add provenance for model-generated content
     dashboard_payload["itinerary_source"] = "model_generated"
     dashboard_payload["assistant_message_source"] = "model_generated"  # Will be overridden in ai_model_service based on model variant
 
-    # Keep existing legacy fields for backward compatibility
-    _apply_api_truth(
-        dashboard_payload,
-        api_name="flights",
-        available=bool(flights),
-        present=lambda: dashboard_payload.update({"flight": flights[0] if flights else None, "flight_options": flights}),
-        missing=lambda: dashboard_payload.update({"flight": None, "flight_options": []}),
-    )
-    _apply_api_truth(
-        dashboard_payload,
-        api_name="hotels",
-        available=bool(hotels),
-        present=lambda: dashboard_payload.update({"stay_recommendations": hotels, "hotel_options": hotels}),
-        missing=lambda: dashboard_payload.update({"stay_recommendations": [], "hotel_options": []}),
-    )
-    _apply_api_truth(
-        dashboard_payload,
-        api_name="weather",
-        available=weather is not None,
-        present=lambda: dashboard_payload.update({"weather": weather, "weather_data": weather}),
-        missing=lambda: dashboard_payload.update({"weather": None, "weather_data": None}),
-    )
-    _apply_api_truth(
-        dashboard_payload,
-        api_name="events",
-        available=bool(local_events),
-        present=lambda: dashboard_payload.update({"local_events": local_events, "events": local_events}),
-        missing=lambda: dashboard_payload.update({"local_events": [], "events": []}),
-    )
+    # Update API grounding with canonical names only
+    api_grounding = dashboard_payload.setdefault("api_grounding", {"used_api": [], "missing_api": [], "warnings": []})
+    
+    # Update used APIs
+    if weather is not None:
+        if "weather" not in api_grounding["used_api"]:
+            api_grounding["used_api"].append("weather")
+    else:
+        if "weather" not in api_grounding["missing_api"]:
+            api_grounding["missing_api"].append("weather")
+    
+    if flights:
+        if "flights" not in api_grounding["used_api"]:
+            api_grounding["used_api"].append("flights")
+    else:
+        if "flights" not in api_grounding["missing_api"]:
+            api_grounding["missing_api"].append("flights")
+    
+    if hotels:
+        if "hotels" not in api_grounding["used_api"]:
+            api_grounding["used_api"].append("hotels")
+    else:
+        if "hotels" not in api_grounding["missing_api"]:
+            api_grounding["missing_api"].append("hotels")
+    
+    if local_events:
+        if "events" not in api_grounding["used_api"]:
+            api_grounding["used_api"].append("events")
+    else:
+        if "events" not in api_grounding["missing_api"]:
+            api_grounding["missing_api"].append("events")
 
-    # Re-normalize grounding after truth enforcement to deduplicate/alias-resolve
-    _normalize_api_grounding(dashboard_payload)
-
-    # Re-normalize grounding after truth enforcement; add static warning + 'places' to missing
+    # Final normalization and warnings
     _normalize_api_grounding(dashboard_payload)
     _add_static_grounding_warning(dashboard_payload)
 
@@ -574,6 +577,13 @@ _NON_FOOD_KEYWORDS = frozenset(
         "square", "bridge", "church", "cathedral", "gallery", "hiking",
         "hotel", "hostel", "stay", "accommodation", "lodging",
         "guesthouse", "apartment", "motel",
+        # Additional attraction keywords
+        "old town", "town", "philosophers", "way", "path", "street",
+        "university", "river", "viewpoint", "tower", "gate", "wall",
+        "plaza", "market", "square", "district", "quarter", "neighborhood",
+        "beach", "mountain", "hill", "forest", "lake", "waterfall",
+        "zoo", "aquarium", "theater", "cinema", "opera", "concert",
+        "stadium", "arena", "library", "town hall", "station",
     }
 )
 _ROOT_API_FIELDS = frozenset({"used_api", "missing_api", "warnings"})
@@ -811,7 +821,24 @@ def _filter_non_food_recommendations(
         if hotel_names and _normalized_text(item.get("name")) in hotel_names:
             continue
         filtered.append(item)
-    dashboard_payload["food_recommendations"] = filtered
+    
+    # Limit to max 5 recommendations, prioritize first unique ones
+    seen_names = set()
+    limited_filtered = []
+    for item in filtered:
+        if isinstance(item, dict) and "name" in item:
+            name = _normalized_text(item["name"])
+            if name not in seen_names:
+                seen_names.add(name)
+                limited_filtered.append(item)
+                if len(limited_filtered) >= 5:
+                    break
+        else:
+            limited_filtered.append(item)
+            if len(limited_filtered) >= 5:
+                break
+    
+    dashboard_payload["food_recommendations"] = limited_filtered
 
 
 _REAL_APIS = frozenset({"flights", "hotels", "weather", "events", "local_events"})
