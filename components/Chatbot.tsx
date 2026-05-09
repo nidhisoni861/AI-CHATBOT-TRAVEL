@@ -41,19 +41,18 @@ export default function Chatbot() {
       {/* Project Title */}
       <div className="text-center flex-shrink-0">
         <h1
-          className="font-black tracking-tight leading-none"
+          className="title-gradient font-black tracking-tight leading-none"
           style={{
             fontSize: "clamp(1.8rem, 5vw, 3.8rem)",
-            background: "linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0.55) 60%, rgba(255,255,255,0.1) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-            filter: "drop-shadow(0 2px 12px rgba(255,255,255,0.2))",
+            filter: "drop-shadow(0 2px 16px rgba(255,255,255,0.3))",
           }}
         >
           AI Travel Assistant Chatbot
         </h1>
-        <p className="mt-1 text-xs sm:text-sm font-semibold tracking-widest uppercase" style={{ color: "rgba(255,255,255,0.4)" }}>
+        <p
+          className="title-animate mt-1 text-xs sm:text-sm font-semibold tracking-widest uppercase"
+          style={{ color: "rgba(255,255,255,0.5)", animationDelay: "0.3s" }}
+        >
           Powered by Roamora AI
         </p>
       </div>
@@ -128,7 +127,6 @@ export default function Chatbot() {
           </button>
         </div>
 
-        <p className="text-center text-xs text-gray-400 flex-shrink-0">✦ Roamora can make mistakes. Check important info.</p>
       </div>
     </div>
   );
