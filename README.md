@@ -55,6 +55,7 @@ AI-CHATBOT-TRAVEL/
 │   ├── .env                      # Model paths and runtime settings (not committed)
 │   ├── requirements.txt          # Python dependencies
 │   ├── start_backend_wsl.sh      # One-command backend launcher for WSL Ubuntu
+│   ├── start_backend_windows.ps1 # One-command backend launcher for Windows Terminal
 │   └── fine_tuning/
 │       └── scripts/
 │           ├── adapter_loader.py         # PEFT/LoRA model loader
@@ -112,6 +113,18 @@ The script:
 - Starts uvicorn on `0.0.0.0:9000`
 
 **First request** triggers model preload if `BACKEND_PRELOAD_MODEL=fine_tuned`. Subsequent requests reuse the loaded model.
+
+---
+
+## Backend setup (Windows Terminal)
+
+After creating `backend_fine_tuning/.env` with your Hugging Face token, run:
+
+```powershell
+.\backend_fine_tuning\start_backend_windows.ps1
+```
+
+The script creates `backend_fine_tuning\.venv` on first run, installs all Python dependencies, loads `.env`, and starts uvicorn on `127.0.0.1:9000`.
 
 ---
 

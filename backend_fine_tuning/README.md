@@ -50,7 +50,8 @@ backend_fine_tuning/
 |-- .env.example                  # teammate-safe config template
 |-- README.md
 |-- requirements.txt
-`-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+|-- start_backend_wsl.sh          # recommended WSL/Linux launcher, defaults to port 9000
+`-- start_backend_windows.ps1     # Windows Terminal/PowerShell launcher, defaults to port 9000
 ```
 
 Archived training/proof files are under:
@@ -170,8 +171,12 @@ python -m uvicorn add_backend.app.main:app --host 0.0.0.0 --port 9000
 Windows PowerShell:
 
 ```powershell
-cd backend_fine_tuning
-.\.venv\Scripts\Activate.ps1
+.\backend_fine_tuning\start_backend_windows.ps1
+```
+
+The script creates `.venv` if needed, installs `requirements.txt`, loads `backend_fine_tuning/.env`, and starts:
+
+```powershell
 python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
 ```
 
@@ -189,7 +194,7 @@ Windows PowerShell:
 
 ```powershell
 $env:BACKEND_PRELOAD_MODEL="none"
-python -m uvicorn add_backend.app.main:app --host 127.0.0.1 --port 9000
+.\backend_fine_tuning\start_backend_windows.ps1
 ```
 
 ## Local URLs
@@ -280,22 +285,38 @@ python -m pip install --upgrade pip
 pip install -r backend_fine_tuning\requirements.txt
 ```
 
-### 5. Install PyTorch
+The requirements file should keep the backend runtime dependencies, including:
 
-For NVIDIA GPU / CUDA 12.4 compatible setup:
+```text
+torch
+transformers
+accelerate
+peft
+huggingface_hub
+python-dotenv
+safetensors
+fastapi
+uvicorn[standard]
+pydantic
+requests
+```
+
+For model loading, also make sure these Hugging Face/model helper packages are installed. Do not remove the existing dependencies above.
+
+```powershell
+pip install -U transformers accelerate peft bitsandbytes sentencepiece protobuf safetensors huggingface_hub
+```
+
+### 5. Install CUDA PyTorch For Real Model Testing
+
+Plain `torch` in `requirements.txt` does not guarantee a CUDA-enabled Windows build. If you want to run the real fine-tuned model on an NVIDIA GPU, reinstall PyTorch from the CUDA 12.4 wheel index:
 
 ```powershell
 pip uninstall -y torch torchvision torchaudio
 pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
-Then install/upgrade model libraries:
-
-```powershell
-pip install -U transformers accelerate peft bitsandbytes sentencepiece protobuf safetensors huggingface_hub
-```
-
-For CPU-only or frontend/mock testing, CUDA PyTorch is not required, but real model loading will be very slow or may fail.
+For CPU-only or frontend/mock testing, CUDA PyTorch is not required. Real model loading without CUDA will be very slow or may fail because of memory limits.
 
 ### 6. Verify GPU and CUDA
 
@@ -306,7 +327,7 @@ nvidia-smi
 Then:
 
 ```powershell
-python -c "import torch; print(torch.__version__); print('CUDA:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU detected')"
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.version.cuda); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO CUDA')"
 ```
 
 For real fine-tuned model testing, 8 GB+ VRAM is recommended, and 12 GB+ is better.
