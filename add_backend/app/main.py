@@ -4,6 +4,15 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Load .env BEFORE importing services — they read env vars at module init time
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _root = Path(__file__).resolve().parents[2]
+    _load_dotenv(_root / "backend_fine_tuning" / ".env", override=False)
+    _load_dotenv(_root / "backend_fine_tuning" / ".env.example", override=False)
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
