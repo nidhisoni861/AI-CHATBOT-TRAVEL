@@ -272,6 +272,17 @@ def normalize_dashboard_payload(
     return normalized
 
 
+def _has_live_data(value: Any) -> bool:
+    """Check if API data contains real live data."""
+    if value is None:
+        return False
+    if isinstance(value, list):
+        return len(value) > 0
+    if isinstance(value, dict):
+        return len(value) > 0
+    return bool(value)
+
+
 def enforce_api_context_truth(
     payload: dict[str, Any],
     api_context: dict[str, Any] | None,
@@ -287,26 +298,33 @@ def enforce_api_context_truth(
     weather = context.get("weather")
     local_events = _as_list(context.get("local_events"))
 
+    # Check for missing API keys in warnings
+    warnings = context.get("warnings", [])
+    weather_missing_key = "Weather service unavailable - API key missing" in warnings
+    flights_missing_key = "FLIGHT_API_KEY not found" in warnings or "Flight service unavailable - API key missing" in warnings
+    hotels_missing_key = "RAPIDAPI_KEY not found" in warnings or "Hotel service unavailable - API key missing" in warnings
+    events_missing_key = "TICKETMASTER_API_KEY not found" in warnings or "Events service unavailable - API key missing" in warnings
+
     # Add provenance structure for API data
     dashboard_payload["weather"] = {
         "data": weather,
         "source": "live_api",
-        "status": "available" if weather is not None else "unavailable"
+        "status": "missing_api_key" if weather_missing_key else ("available" if _has_live_data(weather) else "unavailable")
     }
     dashboard_payload["flights"] = {
         "data": flights,
         "source": "live_api",
-        "status": "available" if flights else "unavailable"
+        "status": "missing_api_key" if flights_missing_key else ("available" if _has_live_data(flights) else "unavailable")
     }
     dashboard_payload["hotels"] = {
         "data": hotels,
         "source": "live_api",
-        "status": "available" if hotels else "unavailable"
+        "status": "missing_api_key" if hotels_missing_key else ("available" if _has_live_data(hotels) else "unavailable")
     }
     dashboard_payload["local_events"] = {
         "data": local_events,
         "source": "live_api",
-        "status": "available" if local_events else "unavailable"
+        "status": "missing_api_key" if events_missing_key else ("available" if _has_live_data(local_events) else "unavailable")
     }
 
     # Add provenance for trip summary (backend extracted)

@@ -101,6 +101,17 @@ def unload_models() -> None:
     _unload_current_model()
 
 
+def _has_live_data(value: Any) -> bool:
+    """Check if API data contains real live data."""
+    if value is None:
+        return False
+    if isinstance(value, list):
+        return len(value) > 0
+    if isinstance(value, dict):
+        return len(value) > 0
+    return bool(value)
+
+
 def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
     """Build a mock response for testing orchestration without loading models"""
     # Extract travel information from api_context (populated by API context service)
@@ -116,6 +127,13 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
         travel_desc = f"{duration}-day trip from {origin} to {destination}"
     else:
         travel_desc = f"{duration}-day trip to {destination}"
+    
+    # Check for missing API keys in warnings
+    warnings = api_context.get("warnings", [])
+    weather_missing_key = "Weather service unavailable - API key missing" in warnings
+    flights_missing_key = "FLIGHT_API_KEY not found" in warnings or "Flight service unavailable - API key missing" in warnings
+    hotels_missing_key = "RAPIDAPI_KEY not found" in warnings or "Hotel service unavailable - API key missing" in warnings
+    events_missing_key = "TICKETMASTER_API_KEY not found" in warnings or "Events service unavailable - API key missing" in warnings
     
     return ChatResponse(
         session_id=request.session_id,
@@ -138,22 +156,22 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
             "weather": {
                 "data": api_context.get("weather"),
                 "source": "live_api",
-                "status": "missing_api_key" if "Weather service unavailable - API key missing" in api_context.get("warnings", []) else "unavailable"
+                "status": "missing_api_key" if weather_missing_key else ("available" if _has_live_data(api_context.get("weather")) else "unavailable")
             },
             "flights": {
                 "data": api_context.get("flights", []),
                 "source": "live_api",
-                "status": "unavailable"
+                "status": "missing_api_key" if flights_missing_key else ("available" if _has_live_data(api_context.get("flights", [])) else "unavailable")
             },
             "hotels": {
                 "data": api_context.get("hotels", []),
                 "source": "live_api", 
-                "status": "unavailable"
+                "status": "missing_api_key" if hotels_missing_key else ("available" if _has_live_data(api_context.get("hotels", [])) else "unavailable")
             },
             "local_events": {
                 "data": api_context.get("local_events", []),
                 "source": "live_api",
-                "status": "unavailable"
+                "status": "missing_api_key" if events_missing_key else ("available" if _has_live_data(api_context.get("local_events", [])) else "unavailable")
             },
             "food_recommendations": [],
             "itinerary": [],
