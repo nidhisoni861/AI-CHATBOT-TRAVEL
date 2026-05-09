@@ -2,6 +2,7 @@
 Weather service using OpenWeatherMap API
 """
 import httpx
+from typing import Optional
 from add_backend.app.models.chat_models import WeatherInfo
 from add_backend.app.core.config import get_api_key, is_service_enabled
 
