@@ -39,6 +39,11 @@ class WeatherService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
+                
+                # Log rate limit headers
+                rate_limit = response.headers.get('x-ratelimit-remaining', 'unknown')
+                print(f"🌤️ Weather API Rate Limit: {rate_limit} requests remaining")
+                
                 response.raise_for_status()
                 
                 data = response.json()

@@ -59,6 +59,12 @@ class HotelService:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=headers, params=params)
+                
+                # Log rate limit headers
+                rate_limit = response.headers.get('x-ratelimit-requests-limit', 'unknown')
+                rate_remaining = response.headers.get('x-ratelimit-requests-remaining', 'unknown')
+                print(f"🔍 Hotel API Rate Limit: {rate_remaining}/{rate_limit} requests remaining")
+                
                 response.raise_for_status()
                 
                 data = response.json()
@@ -92,16 +98,28 @@ class HotelService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, headers=headers, params=params)
+                
+                # Log rate limit headers
+                rate_limit = response.headers.get('x-ratelimit-requests-limit', 'unknown')
+                rate_remaining = response.headers.get('x-ratelimit-requests-remaining', 'unknown')
+                print(f"🔍 Hotel Destination API Rate Limit: {rate_remaining}/{rate_limit} requests remaining")
+                
                 response.raise_for_status()
                 
                 data = response.json()
                 if "data" in data and len(data["data"]) > 0:
                     return data["data"][0].get("dest_id")
                 
-        except Exception as e:
-            print(f"Error getting destination ID: {e}")
-        
-        return None
+                return None
+                
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                retry_after = e.response.headers.get('retry-after', 'unknown')
+                print(f"🚨 HOTEL API RATE LIMIT HIT! Retry after: {retry_after} seconds")
+                print(f"📍 URL: {e.request.url}")
+            else:
+                print(f"Hotel API HTTP error: {e}")
+            return None
     
     def _extract_price(self, hotel_data: dict) -> Optional[str]:
         """Extract price from hotel data"""
