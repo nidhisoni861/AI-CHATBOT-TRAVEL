@@ -24,13 +24,13 @@ def list_models() -> dict[str, object]:
 
 
 @router.get("/chat", response_model=ChatResponse, response_model_exclude_none=True)
-def chat_get(
+async def chat_get(
     message: str = Query(min_length=1),
     model_variant: ModelVariant = "fine_tuned",
     session_id: str = "demo-user-1",
 ) -> ChatResponse:
     request = ChatRequest(session_id=session_id, message=message, model_variant=model_variant)
-    return generate_travel_response(request)
+    return await generate_travel_response(request)
 
 
 @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
@@ -55,5 +55,5 @@ async def chat_post(request: Request) -> ChatResponse:
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
-    return generate_travel_response(chat_request)
+    return await generate_travel_response(chat_request)
 

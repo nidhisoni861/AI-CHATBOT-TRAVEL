@@ -13,6 +13,7 @@ from threading import Lock
 from typing import Any
 
 DEBUG_RAW_OUTPUT = os.getenv("WANDERLY_DEBUG_RAW_OUTPUT", "false").lower() == "true"
+MOCK_MODEL = os.getenv("WANDERLY_MOCK_MODEL", "false").lower() == "true"
 
 from add_backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
 
@@ -100,16 +101,84 @@ def unload_models() -> None:
     _unload_current_model()
 
 
-def generate_travel_response(request: ChatRequest) -> ChatResponse:
+def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
+    """Build a mock response for testing orchestration without loading models"""
+    # Extract destination from message or context
+    destination = "Unknown"
+    if api_context.get("local_events"):
+        destination = api_context["local_events"][0].get("city", "Stuttgart")
+    
+    # Extract duration from message
+    duration = 2
+    import re
+    duration_match = re.search(r'(\d+)\s*[- ]?\s*day', request.message.lower())
+    if duration_match:
+        duration = int(duration_match.group(1))
+    
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=request.model_variant,
+        adapter_loaded=False,
+        parse_success=True,
+        fallback_used=False,
+        retry_used=False,
+        assistant_message=f"Mock response: API context orchestration completed successfully for {duration}-day trip to {destination}.",
+        dashboard_payload={
+            "intent": "itinerary_generation",
+            "trip_summary": {
+                "destination": destination,
+                "duration_days": duration,
+                "travelers": "solo",
+                "budget": "budget"
+            },
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "transport": "mock",
+                "food": "mock", 
+                "activities": "mock",
+                "total": "mock"
+            },
+            "dashboard_actions": ["show_trip_summary", "show_itinerary"],
+            "api_grounding": {
+                "used_api": api_context.get("used_apis", []),
+                "missing_api": api_context.get("missing_apis", []),
+                "warnings": api_context.get("warnings", []) + ["Mock model mode enabled for local testing."]
+            }
+        }
+    )
+
+
+async def generate_travel_response(request: ChatRequest) -> ChatResponse:
+    # Enrich api_context if empty/default
+    enriched_api_context = request.api_context
+    if not enriched_api_context or (
+        not enriched_api_context.get("flights") and 
+        not enriched_api_context.get("hotels") and 
+        not enriched_api_context.get("weather") and 
+        not enriched_api_context.get("local_events")
+    ):
+        from add_backend.app.services.api_context_service import api_context_service
+        enriched_api_context = await api_context_service.build_api_context_from_message(
+            request.message, enriched_api_context
+        )
+        logger.info("Enriched api_context with live API data")
+    
+    # Use mock mode if enabled
+    if MOCK_MODEL:
+        logger.info("Using mock model mode for local testing")
+        return _build_mock_response(request, enriched_api_context)
+    
+    # Real model generation
     config = AdapterConfig.from_env()
     config = replace(
         config,
         model_max_new_tokens=safe_max_new_tokens(request.max_new_tokens, request.message),
     )
-
+    
     logger.info("Generating response with model_variant=%s", request.model_variant)
     tokenizer, model = _get_model(request.model_variant, config)
-    prompt = _build_prompt(request.message, request.api_context)
+    prompt = _build_prompt(request.message, enriched_api_context)
     raw_text = generate_text(tokenizer, model, prompt, config)
 
     parse_success = False
@@ -119,19 +188,19 @@ def generate_travel_response(request: ChatRequest) -> ChatResponse:
     retry_raw_text: str | None = None
 
     try:
-        normalized = safe_parse_and_normalize(raw_text, request.api_context, request.message)
-        normalized = enforce_api_context_truth(normalized, request.api_context, request.message)
+        normalized = safe_parse_and_normalize(raw_text, enriched_api_context, request.message)
+        normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
         parse_success = True
     except Exception as exc:
         err_str = str(exc)
         if any(marker in err_str for marker in _INCOMPLETE_JSON_ERRORS):
             logger.warning("First generation incomplete (%s), retrying with compact prompt", exc)
-            retry_prompt = _build_retry_prompt(request.message, request.api_context)
+            retry_prompt = _build_retry_prompt(request.message, enriched_api_context)
             retry_raw_text = generate_text(tokenizer, model, retry_prompt, config)
             retry_used = True
             try:
-                normalized = safe_parse_and_normalize(retry_raw_text, request.api_context, request.message)
-                normalized = enforce_api_context_truth(normalized, request.api_context, request.message)
+                normalized = safe_parse_and_normalize(retry_raw_text, enriched_api_context, request.message)
+                normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
                 normalized["dashboard_payload"]["api_grounding"].setdefault("warnings", []).append(
                     "Compact retry was used — first response was incomplete JSON."
                 )
