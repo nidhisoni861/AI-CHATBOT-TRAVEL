@@ -1,138 +1,175 @@
-"use client";
-import { useState } from "react";
+import Image from "next/image";
+import {
+  Camera,
+  CalendarDays,
+  CheckCheck,
+  Mic,
+  Paperclip,
+  Plus,
+  Send,
+  Sparkles,
+  Utensils,
+} from "lucide-react";
 
-const suggestions = [
-  { icon: "📅", text: "1 Day trip to Berlin" },
-  { icon: "📅", text: "3 day trip to Munich with faster pace" },
-  { icon: "🍴", text: "5 day trip to Stuttgart with more food experiences" },
-];
-
-function MicIcon({ size = 18 }: { size?: number }) {
+export default function ChatBotPanel() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="22" />
-      <line x1="9" y1="22" x2="15" y2="22" />
-    </svg>
-  );
-}
+    <section className="flex h-full max-h-[calc(100vh-128px)] min-h-0 w-full max-w-[1220px] flex-col rounded-[28px] border border-white/75 bg-white/80 p-4 shadow-[0_28px_90px_rgba(15,23,42,0.24)] backdrop-blur-2xl sm:rounded-[34px] sm:p-5 lg:p-6">
+      {/* Header */}
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-100 to-white shadow-[0_12px_28px_rgba(20,184,166,0.28)] sm:h-14 sm:w-14">
+            <div className="absolute inset-0 rounded-full border-[3px] border-cyan-100/80" />
+            <Image
+              src="/avatar.jpeg"
+              alt="AI avatar"
+              width={44}
+              height={44}
+              className="relative h-full w-full rounded-full object-cover"
+              priority
+            />
+          </div>
 
-function SendIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-    </svg>
-  );
-}
-
-export default function Chatbot() {
-  const [voice, setVoice] = useState(true);
-  const [input, setInput] = useState("");
-
-  return (
-    <div
-      className="h-screen overflow-hidden flex flex-col items-center gap-3 px-4 py-4 sm:px-6 sm:py-5"
-      style={{ background: "linear-gradient(135deg, #0d9488 0%, #2dd4bf 28%, #f9a8d4 62%, #fb923c 100%)" }}
-    >
-      <div className="w-full flex flex-col items-center gap-3 h-full">
-      {/* Project Title */}
-      <div className="text-center flex-shrink-0">
-        <h1
-          className="title-gradient font-black tracking-tight leading-none"
-          style={{
-            fontSize: "clamp(1.8rem, 5vw, 3.8rem)",
-            filter: "drop-shadow(0 2px 16px rgba(255,255,255,0.3))",
-          }}
-        >
-          AI Travel Assistant Chatbot
-        </h1>
-        <p
-          className="subtitle-animate mt-1 text-xs sm:text-sm font-semibold tracking-widest uppercase"
-          style={{ color: "rgba(255,255,255,0.5)" }}
-        >
-          Powered by Roamora AI
-        </p>
-      </div>
-
-      {/* White Chatbot Card — fills remaining height */}
-      <div className="card-animate backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-5 sm:p-8 w-full max-w-6xl flex flex-col gap-4 flex-1 overflow-hidden"
-        style={{
-          background: "rgba(255, 255, 255, 0.68)",
-          border: "1px solid rgba(255, 255, 255, 0.8)",
-          boxShadow: "0 8px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9)",
-        }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-              Roamora AI <span className="text-teal-500">✦</span>
-            </h2>
-            <p className="text-gray-600 text-xs sm:text-sm mt-0.5">Your intelligent travel companion</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 hidden sm:flex"><MicIcon size={15} /></span>
-            <span className="text-gray-700 text-sm font-medium">Voice</span>
-            <button
-              onClick={() => setVoice(!voice)}
-              aria-label="toggle voice"
-              className={`relative rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0 ${voice ? "bg-teal-500" : "bg-gray-300"}`}
-              style={{ width: "48px", height: "26px" }}
-            >
-              <span className={`absolute top-[3px] left-[3px] w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${voice ? "translate-x-[22px]" : "translate-x-0"}`} />
-            </button>
-            <span className="text-sm font-semibold" style={{ minWidth: "28px", color: voice ? "#0d9488" : "#9ca3af" }}>
-              {voice ? "On" : "Off"}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+                Roamora AI
+              </h1>
+              <Sparkles className="h-5 w-5 text-teal-500" />
+            </div>
+            <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-sm">
+              Your intelligent travel companion
+            </p>
           </div>
         </div>
 
-        {/* AI Message Bubble */}
-        <div className="rounded-2xl p-4 sm:p-5 flex-shrink-0" style={{ background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.6)" }}>
-          <p className="font-bold text-gray-900 text-sm sm:text-base mb-1">Hello! 👋 I&apos;m Roamora AI</p>
-          <p className="text-gray-700 text-xs sm:text-sm leading-relaxed">
-            Tell me your destination, travel dates, budget, and travel style. I&apos;ll build your trip plan.
-          </p>
-          <p className="text-right text-xs text-gray-400 mt-2 sm:mt-3">11:19</p>
-        </div>
+        {/* Static Voice Toggle Design */}
+        <div className="flex items-center gap-2 rounded-full border border-white/80 bg-teal-700 px-3 py-2 text-white shadow-[0_10px_24px_rgba(13,148,136,0.35)] sm:gap-3 sm:px-4 sm:py-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 sm:h-8 sm:w-8">
+            <Mic className="h-4 w-4" />
+          </span>
 
-        {/* Suggestions — flex-1 fills leftover space */}
-        <div className="flex-1 flex flex-col justify-center">
-          <p className="text-center text-gray-500 text-xs sm:text-sm mb-3">✦ Try asking me: ✦</p>
-          <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
-            {suggestions.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => setInput(s.text)}
-                className="flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-xs sm:text-sm text-gray-700 hover:scale-105 transition-all"
-                style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.7)" }}
-              >
-                <span>{s.icon}</span> {s.text}
-              </button>
-            ))}
+          <span className="hidden text-xs font-bold sm:inline sm:text-sm">
+            Voice On
+          </span>
+
+          <span className="relative h-6 w-11 rounded-full bg-white/30">
+            <span className="absolute left-5 top-0.5 h-5 w-5 rounded-full bg-white shadow-md" />
+          </span>
+        </div>
+      </header>
+
+      {/* Chat Area */}
+      <div className="mt-4 flex flex-1 flex-col justify-center gap-3 overflow-y-auto pr-1 sm:mt-5 sm:gap-4">
+        {/* AI Message */}
+        <div className="flex items-start gap-2.5 sm:gap-3">
+          <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-50 shadow-[0_8px_20px_rgba(20,184,166,0.22)] sm:h-10 sm:w-10">
+            <Image
+              src="/avatar.jpeg"
+              alt="AI avatar"
+              width={36}
+              height={36}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+
+          <div className="max-w-[85%] rounded-[18px] rounded-tl-md bg-white px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.10)] sm:max-w-[680px] sm:px-5 sm:py-4">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold leading-relaxed text-slate-900">
+                New chat started ✨
+              </p>
+              <p className="text-sm font-normal leading-relaxed text-slate-700">
+                Tell me your destination, travel dates, budget, and travel
+                style. I&apos;ll build your trip plan.
+              </p>
+            </div>
+
+            <p className="mt-2 text-right text-xs font-medium text-slate-400">
+              11:16
+            </p>
           </div>
         </div>
 
-        {/* Input Bar */}
-        <div className="rounded-xl sm:rounded-2xl flex items-center gap-2 sm:gap-3 px-4 py-3 flex-shrink-0" style={{ background: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.6)" }}>
-          <button className="text-gray-400 hover:text-gray-600 text-xl font-light leading-none">+</button>
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask anything about travel..."
-            className="flex-1 outline-none text-sm text-gray-700 placeholder-gray-400 bg-transparent"
-          />
-          <button className="w-9 h-9 rounded-full border-2 border-teal-400 text-teal-500 hover:bg-teal-50 flex items-center justify-center transition-colors flex-shrink-0">
-            <MicIcon size={15} />
-          </button>
-          <button className="bg-teal-600 text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-teal-700 transition-colors flex-shrink-0">
-            <SendIcon />
-          </button>
-        </div>
+        {/* Example User Message */}
+        <div className="flex justify-end">
+          <div className="max-w-[80%] rounded-[18px] rounded-tr-md bg-gradient-to-br from-teal-700 to-cyan-700 px-4 py-3 text-white shadow-[0_10px_24px_rgba(13,148,136,0.28)] sm:max-w-[480px] sm:px-5">
+            <p className="text-sm font-medium leading-relaxed">
+              I want a 3 day trip to Munich with faster pace.
+            </p>
 
+            <div className="mt-1.5 flex items-center justify-end gap-1.5 text-xs text-white/80">
+              <span>11:18</span>
+              <CheckCheck className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Suggestions */}
+      <div className="mt-4 flex flex-wrap justify-center gap-2 sm:gap-3">
+        <button className="flex items-center gap-1.5 rounded-full border border-teal-500/70 bg-white/60 px-3 py-2 text-xs font-semibold text-teal-700 shadow-sm transition hover:bg-white/90 sm:px-4 sm:py-2.5 sm:text-sm">
+          <CalendarDays className="h-4 w-4" />
+          1 Day trip to Berlin
+        </button>
+
+        <button className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white/90 sm:px-4 sm:py-2.5 sm:text-sm">
+          <CalendarDays className="h-4 w-4" />
+          3 day trip to Munich with faster pace
+        </button>
+
+        <button className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white/90 sm:px-4 sm:py-2.5 sm:text-sm">
+          <Utensils className="h-4 w-4" />
+          5 day trip to Stuttgart with more food experiences
+        </button>
       </div>
-    </div>
+
+      {/* Input Area - Static Design Only */}
+      <footer className="mt-4 rounded-[22px] border border-white/70 bg-white/75 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] sm:mt-5 sm:p-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            aria-label="Add"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm sm:h-11 sm:w-11"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Attach files"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 sm:h-11 sm:w-11"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Camera"
+            className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 sm:flex sm:h-11 sm:w-11"
+          >
+            <Camera className="h-5 w-5" />
+          </button>
+
+          <div className="min-w-0 flex-1 bg-transparent px-2 text-sm font-medium text-slate-500">
+            Ask anything about travel...
+          </div>
+
+          <button
+            type="button"
+            aria-label="Voice input"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm sm:h-11 sm:w-11"
+          >
+            <Mic className="h-5 w-5" />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Send message"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-700 to-cyan-700 text-white shadow-[0_10px_24px_rgba(13,148,136,0.35)] sm:h-12 sm:w-12"
+          >
+            <Send className="h-5 w-5" />
+          </button>
+        </div>
+      </footer>
+    </section>
   );
 }
