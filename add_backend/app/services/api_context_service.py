@@ -310,8 +310,71 @@ class ApiContextService:
                 enriched_context["warnings"].append(f"Weather service error: {str(e)}")
                 enriched_context["missing_apis"].append("weather")
         
-        # Flights: only fetch for explicit flight request (not automatic for itinerary)
-        if intent.get("flights", False):
+        # Flights: fetch for itinerary generation or explicit flight request
+        if is_itinerary and travel_info.get("origin") and travel_info.get("destination"):
+            departure_date = travel_info.get("departure_date", "14/10/2026")
+            return_date = travel_info.get("return_date", "17/10/2026")
+
+            flight_result = await self.flight_service.search_flights(
+                origin=travel_info["origin"],
+                destination=travel_info["destination"],
+                departure_date=departure_date,
+                return_date=return_date
+            )
+
+            # Normalize flight service response
+            if isinstance(flight_result, list):
+                flights_list = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flight_result]
+            elif isinstance(flight_result, dict) and "data" in flight_result:
+                flight_data = flight_result["data"]
+                if isinstance(flight_data, list):
+                    flights_list = flight_data
+                elif flight_data:
+                    flights_list = [flight_data]
+                else:
+                    flights_list = []
+            else:
+                flights_list = []
+
+            if flights_list:
+                enriched_context["flights"] = flights_list
+                enriched_context["flight_source"] = "live_api"
+                if "flights" not in enriched_context["used_apis"]:
+                    enriched_context["used_apis"].append("flights")
+            else:
+                # Create static fallback flights
+                fallback_flights = [
+                    {
+                        "origin": travel_info["origin"],
+                        "destination": travel_info["destination"],
+                        "departure_date": departure_date,
+                        "return_date": return_date,
+                        "departure_time": "08:00",
+                        "arrival_time": "09:30",
+                        "airline": "Lufthansa",
+                        "flight_number": "LH123",
+                        "price": f"${150 + hash(travel_info['origin'] + travel_info['destination']) % 200}",
+                        "source": "static_fallback"
+                    },
+                    {
+                        "origin": travel_info["origin"],
+                        "destination": travel_info["destination"],
+                        "departure_date": departure_date,
+                        "return_date": return_date,
+                        "departure_time": "14:00",
+                        "arrival_time": "15:30",
+                        "airline": "Eurowings",
+                        "flight_number": "EW456",
+                        "price": f"${120 + hash(travel_info['destination'] + travel_info['origin']) % 180}",
+                        "source": "static_fallback"
+                    }
+                ]
+                enriched_context["flights"] = fallback_flights
+                enriched_context["flight_source"] = "static_fallback"
+                if "flights" not in enriched_context["missing_apis"]:
+                    enriched_context["missing_apis"].append("flights")
+                enriched_context["warnings"].append("Live flight API unavailable; showing static fallback flight options.")
+        elif intent.get("flights", False):
             # Check if destination is missing
             if not travel_info.get("destination"):
                 enriched_context["warnings"].append("Destination is missing. Please provide destination city.")

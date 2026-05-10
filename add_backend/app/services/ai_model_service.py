@@ -9,9 +9,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Optional
 
 DEBUG_RAW_OUTPUT = os.getenv("WANDERLY_DEBUG_RAW_OUTPUT", "false").lower() == "true"
 MOCK_MODEL = os.getenv("WANDERLY_MOCK_MODEL", "false").lower() == "true"
@@ -111,6 +112,179 @@ def _has_live_data(value: Any) -> bool:
     if isinstance(value, dict):
         return len(value) > 0
     return bool(value)
+
+
+def normalize_flight_date(date_str: Optional[str], default_date: str) -> str:
+    """Normalize flight date to YYYY-MM-DD format with fallback."""
+    if not date_str:
+        return default_date
+    
+    try:
+        # Try to parse different date formats
+        if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+            return date_str  # Already in correct format
+        elif re.match(r'\d{2}/\d{2}/\d{4}', date_str):
+            # Convert DD/MM/YYYY to YYYY-MM-DD
+            day, month, year = date_str.split('/')
+            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        else:
+            return default_date
+    except Exception:
+        return default_date
+
+
+def normalize_flights_result(flight_result: Any) -> list[dict]:
+    """Normalize flight service result to list of dictionaries."""
+    if not flight_result:
+        return []
+    
+    if isinstance(flight_result, list):
+        return [flight.dict() if hasattr(flight, 'dict') else flight for flight in flight_result]
+    elif isinstance(flight_result, dict) and "data" in flight_result:
+        flight_data = flight_result["data"]
+        if isinstance(flight_data, list):
+            return flight_data
+        elif flight_data:
+            return [flight_data]
+    
+    return []
+
+
+def build_static_fallback_flights(origin: str, destination: str, departure_date: str, return_date: Optional[str] = None) -> list[dict]:
+    """Build static fallback flight options when API is unavailable."""
+    return [
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "departure_time": "08:00",
+            "arrival_time": "09:30",
+            "airline": "Lufthansa",
+            "flight_number": "LH123",
+            "price": f"${150 + hash(origin + destination) % 200}",
+            "source": "static_fallback"
+        },
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "departure_time": "14:00",
+            "arrival_time": "15:30",
+            "airline": "Eurowings",
+            "flight_number": "EW456",
+            "price": f"${120 + hash(destination + origin) % 180}",
+            "source": "static_fallback"
+        }
+    ]
+
+
+async def ensure_flights_for_route(payload: dict, api_context: dict, origin: Optional[str], destination: Optional[str]) -> dict:
+    """Ensure flights are always present for valid origin/destination routes."""
+    if not payload:
+        payload = {}
+
+    if not origin:
+        origin = (
+            payload.get("trip_summary", {}).get("origin")
+            or api_context.get("travel_info", {}).get("origin")
+        )
+
+    if not destination:
+        destination = (
+            payload.get("trip_summary", {}).get("destination")
+            or api_context.get("travel_info", {}).get("destination")
+        )
+
+    if not origin or not destination or destination in ["Unknown", "unknown", None, ""]:
+        payload["flights"] = {
+            "data": [],
+            "source": "live_api",
+            "status": "unavailable"
+        }
+        return payload
+
+    travel_info = api_context.get("travel_info") or {}
+
+    departure_date = normalize_flight_date(travel_info.get("departure_date"), "14/10/2026")
+    return_date = normalize_flight_date(travel_info.get("return_date"), "17/10/2026")
+
+    flights_list = []
+
+    # 1. Prefer api_context flights if already available
+    existing_flights = api_context.get("flights")
+    if isinstance(existing_flights, list) and existing_flights:
+        flights_list = existing_flights
+        flight_source = api_context.get("flight_source", "live_api")
+    else:
+        # 2. Try live FlightService
+        try:
+            from add_backend.app.services.flight_service import FlightService
+            flight_service = FlightService()
+
+            flight_result = await flight_service.search_flights(
+                origin=origin,
+                destination=destination,
+                departure_date=departure_date,
+                return_date=return_date
+            )
+
+            flights_list = normalize_flights_result(flight_result)
+            flight_source = "live_api" if flights_list else "static_fallback"
+
+        except Exception as exc:
+            logger.error("[ENSURE FLIGHTS ERROR] %s", exc)
+            flights_list = []
+            flight_source = "static_fallback"
+
+    # 3. If live data empty, create static fallback
+    if not flights_list:
+        flights_list = build_static_fallback_flights(origin, destination, departure_date, return_date)
+        flight_source = "static_fallback"
+
+    payload["flights"] = {
+        "data": flights_list,
+        "source": flight_source,
+        "status": "available"
+    }
+
+    # Add show_flights action
+    actions = payload.get("dashboard_actions") or []
+    for action in ["show_trip_summary", "show_itinerary", "show_budget"]:
+        if action not in actions:
+            actions.append(action)
+
+    if "show_flights" not in actions:
+        actions.append("show_flights")
+
+    payload["dashboard_actions"] = actions
+
+    # Fix api_grounding
+    grounding = payload.get("api_grounding") or {}
+    used_api = grounding.get("used_api") or []
+    missing_api = grounding.get("missing_api") or []
+    warnings = grounding.get("warnings") or []
+
+    if flight_source == "live_api":
+        if "flights" not in used_api:
+            used_api.append("flights")
+        missing_api = [x for x in missing_api if x != "flights"]
+    else:
+        if "flights" not in missing_api:
+            missing_api.append("flights")
+        if "Live flight API unavailable; showing static fallback flight options." not in warnings:
+            warnings.append("Live flight API unavailable; showing static fallback flight options.")
+
+    payload["api_grounding"] = {
+        "used_api": used_api,
+        "missing_api": missing_api,
+        "warnings": warnings
+    }
+
+    logger.info("[ENSURE FLIGHTS FINAL] %s", payload.get("flights"))
+
+    return payload
 
 
 def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
@@ -606,6 +780,18 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         # Apply API context truth
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
         
+        # Ensure flights are always present for itinerary generation
+        if backend_intent == "itinerary_generation":
+            trip_summary = normalized_dashboard.get("trip_summary") or {}
+            normalized_dashboard = await ensure_flights_for_route(
+                normalized_dashboard,
+                enriched_api_context,
+                trip_summary.get("origin"),
+                trip_summary.get("destination")
+            )
+            # Update the normalized response with the enhanced dashboard
+            normalized["dashboard_payload"] = normalized_dashboard
+        
         parse_success = True
         logger.info("[GTR AFTER NORMALIZE]")
         logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
@@ -618,7 +804,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         logger.error(f"[ENRICHED API CONTEXT] {json.dumps(enriched_api_context, indent=2)}")
         
         # Build static fallback based on backend intent
-        normalized = build_static_fallback_from_context(
+        normalized = await build_static_fallback_from_context(
             request=request,
             backend_intent=backend_intent,
             api_context=enriched_api_context
@@ -1519,7 +1705,7 @@ def _build_flight_validation_response(request: ChatRequest, origin: str, destina
     )
 
 
-def build_static_fallback_from_context(request: ChatRequest, backend_intent: str, api_context: dict) -> dict:
+async def build_static_fallback_from_context(request: ChatRequest, backend_intent: str, api_context: dict) -> dict:
     """Build static fallback response based on backend intent and API context"""
     travel_info = api_context.get("travel_info", {})
     origin = travel_info.get("origin", "Stuttgart")
@@ -1568,6 +1754,14 @@ def build_static_fallback_from_context(request: ChatRequest, backend_intent: str
         
         # Merge live API data into fallback
         fallback_payload = merge_live_api_context_into_dashboard(fallback_payload, api_context, backend_intent)
+        
+        # Ensure flights are always present for itinerary generation
+        fallback_payload = await ensure_flights_for_route(
+            fallback_payload,
+            api_context,
+            origin,
+            destination
+        )
         
         return {
             "assistant_message": f"Here is a {duration}-day budget trip plan from {origin} to {destination}.",

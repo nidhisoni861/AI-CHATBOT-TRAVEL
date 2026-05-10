@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
-from typing import Any
+from typing import Any, Optional, Dict, List
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-API_ALIASES = {
+API_ALIASES: Dict[str, str] = {
     "flight": "flights",
     "flight_api": "flights",
     "flights_api": "flights",
@@ -34,7 +34,7 @@ API_ALIASES = {
     "food_api": "destination",
 }
 
-MISSING_API_ALIASES = {
+MISSING_API_ALIASES: Dict[str, str] = {
     **API_ALIASES,
     "event": "events",
     "events": "events",
@@ -44,7 +44,7 @@ MISSING_API_ALIASES = {
     "local_events": "events",
 }
 
-DEFAULT_DASHBOARD_PAYLOAD: dict[str, Any] = {
+DEFAULT_DASHBOARD_PAYLOAD: Dict[str, Any] = {
     "schema_version": "travel_dashboard_v1",
     "intent": "itinerary_generation",
     "trip_summary": {},
@@ -62,9 +62,9 @@ DEFAULT_DASHBOARD_PAYLOAD: dict[str, Any] = {
 
 
 class ApiGroundingPayload(BaseModel):
-    used_api: list[str] = Field(default_factory=list)
-    missing_api: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+    used_api: List[str] = Field(default_factory=list)
+    missing_api: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
 
 
 class DashboardPayload(BaseModel):
@@ -72,18 +72,18 @@ class DashboardPayload(BaseModel):
 
     schema_version: str
     intent: str
-    trip_summary: dict[str, Any]
-    flight: Any | None = None
-    stay_recommendations: list[Any] = Field(default_factory=list)
+    trip_summary: Dict[str, Any]
+    flight: Optional[Any] = None
+    stay_recommendations: List[Any] = Field(default_factory=list)
     weather: Any = None
     flights: Any = Field(default_factory=list)
     hotels: Any = Field(default_factory=list)
     local_events: Any = Field(default_factory=list)
-    food_recommendations: list[Any]
-    itinerary: list[Any]
-    map_data: dict[str, Any]
-    budget_breakdown: dict[str, Any]
-    dashboard_actions: list[str]
+    food_recommendations: List[Any]
+    itinerary: List[Any]
+    map_data: Dict[str, Any]
+    budget_breakdown: Dict[str, Any]
+    dashboard_actions: List[str]
     api_grounding: ApiGroundingPayload
 
 
@@ -395,7 +395,7 @@ def enforce_api_context_truth(
     return validate_normalized_response(normalized)
 
 
-def build_safe_fallback_response(warning: str | None = None) -> dict[str, Any]:
+def build_safe_fallback_response(warning: Optional[str] = None) -> Dict[str, Any]:
     # Build canonical fallback response
     dashboard_payload = {
         "schema_version": "travel_dashboard_v1",
@@ -807,13 +807,13 @@ _TRANSPORT_ACTIVITY_KEYWORDS = frozenset({
 })
 
 
-def _deduplicate_itinerary(dashboard_payload: dict[str, Any]) -> None:
+def _deduplicate_itinerary(dashboard_payload: Dict[str, Any]) -> None:
     """Remove exact duplicate (day, time, activity) combos while preserving repeated activities across different days."""
     items = dashboard_payload.get("itinerary")
     if not isinstance(items, list):
         return
-    seen: set[tuple[str, str, str]] = set()
-    deduped: list[Any] = []
+    seen: set = set()
+    deduped: List[Any] = []
     for item in items:
         if not isinstance(item, dict):
             deduped.append(item)
@@ -829,7 +829,7 @@ def _deduplicate_itinerary(dashboard_payload: dict[str, Any]) -> None:
     dashboard_payload["itinerary"] = deduped
 
 
-def _infer_duration_days_from_message(user_message: str) -> int | None:
+def _infer_duration_days_from_message(user_message: str) -> Optional[int]:
     match = re.search(r"\b(\d+)\s*[- ]?\s*day\b", user_message.lower())
     if not match:
         return None
@@ -839,7 +839,7 @@ def _infer_duration_days_from_message(user_message: str) -> int | None:
         return None
 
 
-def _infer_budget_from_message(user_message: str) -> int | None:
+def _infer_budget_from_message(user_message: str) -> Optional[int]:
     patterns = [
         r"\bunder\s+(\d+)\s*(?:eur|€)?\b",
         r"\b(\d+)\s*(?:eur|€)\s*budget\b",
@@ -856,7 +856,7 @@ def _infer_budget_from_message(user_message: str) -> int | None:
     return None
 
 
-def _infer_destination_from_message(user_message: str) -> str | None:
+def _infer_destination_from_message(user_message: str) -> Optional[str]:
     patterns = [
         r"\bto\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüßéèêàç\- ]+?)\s+under\b",
         r"\bto\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüßéèêàç\- ]+?)\s+with\b",
@@ -880,18 +880,18 @@ _KNOWN_PREFERENCES = [
 ]
 
 
-def _infer_preferences_from_message(user_message: str) -> list[str]:
+def _infer_preferences_from_message(user_message: str) -> List[str]:
     lower = user_message.lower()
     return [pref for pref in _KNOWN_PREFERENCES if pref in lower]
 
 
-def _sanitize_trip_summary(dashboard_payload: dict[str, Any], user_message: str = "") -> None:
+def _sanitize_trip_summary(dashboard_payload: Dict[str, Any], user_message: str = "") -> None:
     """Strip nested/recursive pollution from trip_summary; keep only known flat keys."""
     ts = dashboard_payload.get("trip_summary")
     if not isinstance(ts, dict):
         ts = {}
 
-    cleaned: dict[str, Any] = {}
+    cleaned: Dict[str, Any] = {}
     for key in _ALLOWED_TRIP_SUMMARY_KEYS:
         if key not in ts:
             continue
@@ -930,10 +930,10 @@ def _sanitize_trip_summary(dashboard_payload: dict[str, Any], user_message: str 
     dashboard_payload["trip_summary"] = cleaned
 
 
-def _hotel_names_from_context(api_context: dict[str, Any] | None) -> set[str]:
+def _hotel_names_from_context(api_context: Optional[Dict[str, Any]]) -> set:
     """Return normalized hotel names from api_context so they can be excluded from food/itinerary."""
     ctx = api_context or {}
-    names: set[str] = set()
+    names: set = set()
     for h in _as_list(ctx.get("hotels")):
         if isinstance(h, dict):
             name = _normalized_text(h.get("name"))
@@ -943,8 +943,8 @@ def _hotel_names_from_context(api_context: dict[str, Any] | None) -> set[str]:
 
 
 def _filter_non_food_recommendations(
-    dashboard_payload: dict[str, Any],
-    api_context: dict[str, Any] | None = None,
+    dashboard_payload: Dict[str, Any],
+    api_context: Optional[Dict[str, Any]],
 ) -> None:
     """Remove food_recommendations entries that are clearly non-food (transport, attractions, hotels, etc.)."""
     items = dashboard_payload.get("food_recommendations")
@@ -988,7 +988,7 @@ def _filter_non_food_recommendations(
 _REAL_APIS = frozenset({"flights", "hotels", "weather", "events", "local_events"})
 
 
-def _normalize_live_api_section(value: Any, default_data: Any) -> dict[str, Any]:
+def _normalize_live_api_section(value: Any, default_data: Any) -> Dict[str, Any]:
     """Normalize live API section to canonical structure with data/source/status."""
     if isinstance(value, dict) and "data" in value:
         data = value.get("data")
@@ -1009,7 +1009,7 @@ def _normalize_live_api_section(value: Any, default_data: Any) -> dict[str, Any]
     }
 
 
-def _remove_legacy_duplicate_fields(dashboard_payload: dict[str, Any]) -> None:
+def _remove_legacy_duplicate_fields(dashboard_payload: Dict[str, Any]) -> None:
     """Remove legacy duplicate fields from final response."""
     # Remove legacy fields that should not appear in final response
     legacy_fields = [
@@ -1024,7 +1024,7 @@ def _remove_legacy_duplicate_fields(dashboard_payload: dict[str, Any]) -> None:
         dashboard_payload.pop(field, None)
 
 
-def _strip_root_api_fields(dashboard_payload: dict[str, Any]) -> None:
+def _strip_root_api_fields(dashboard_payload: Dict[str, Any]) -> None:
     """Remove root-level used_api/missing_api/warnings that the model sometimes leaks.
 
     The model occasionally outputs these fields at the dashboard_payload root instead of
@@ -1057,7 +1057,7 @@ def _strip_root_api_fields(dashboard_payload: dict[str, Any]) -> None:
 
 # ── Detection helpers ─────────────────────────────────────────────────────────
 
-def _has_api_data(api_context: dict[str, Any] | None, key: str) -> bool:
+def _has_api_data(api_context: Optional[Dict[str, Any]], key: str) -> bool:
     if not isinstance(api_context, dict):
         return False
     val = api_context.get(key)
@@ -1068,7 +1068,7 @@ def _has_api_data(api_context: dict[str, Any] | None, key: str) -> bool:
     return True
 
 
-def _has_places_api(api_context: dict[str, Any] | None) -> bool:
+def _has_places_api(api_context: Optional[Dict[str, Any]]) -> bool:
     return any(
         _has_api_data(api_context, k)
         for k in ("places", "restaurants", "reviews", "google_maps", "ratings")
@@ -1080,14 +1080,14 @@ def _is_budget_trip(user_message: str) -> bool:
     return any(kw in lower for kw in _BUDGET_TRIP_KEYWORDS)
 
 
-def _is_budget_from_summary(dashboard_payload: dict[str, Any]) -> bool:
+def _is_budget_from_summary(dashboard_payload: Dict[str, Any]) -> bool:
     ts = dashboard_payload.get("trip_summary", {})
     if not isinstance(ts, dict):
         return False
     return any(kw in str(ts.get("travel_style", "")).lower() for kw in _BUDGET_TRIP_KEYWORDS)
 
 
-def _parse_eur_amount(value: Any) -> float | None:
+def _parse_eur_amount(value: Any) -> Optional[float]:
     """Extract a numeric amount from values like '40 EUR', '€40', 40, '40'."""
     if isinstance(value, (int, float)):
         return float(value) if value >= 0 else None
@@ -1121,7 +1121,7 @@ def _normalize_price_range(value: Any) -> str:
     return "unknown"
 
 
-def _infer_food_type(item: dict[str, Any]) -> str:
+def _infer_food_type(item: Dict[str, Any]) -> str:
     name = str(item.get("name", "")).strip().lower()
     combined = " ".join(
         str(item.get(k, "")).lower()
@@ -1145,14 +1145,14 @@ def _infer_food_type(item: dict[str, Any]) -> str:
     return "food"
 
 
-def _has_transport_api(api_context: dict[str, Any] | None) -> bool:
+def _has_transport_api(api_context: Optional[Dict[str, Any]]) -> bool:
     ctx = api_context or {}
     return bool(ctx.get("flights") or ctx.get("trains") or ctx.get("buses") or ctx.get("transport"))
 
 
 def _sanitize_food_recommendations(
-    dashboard_payload: dict[str, Any],
-    api_context: dict[str, Any] | None,
+    dashboard_payload: Dict[str, Any],
+    api_context: Optional[Dict[str, Any]],
     user_message: str,
 ) -> None:
     """Rules 1, 2, 4: null ratings, replace fake sources, normalize type/price, remove expensive for budget."""
@@ -1204,7 +1204,7 @@ _FOOD_ITEM_TYPES = frozenset({
 })
 
 
-def _food_recommendation_lookup(dashboard_payload: dict[str, Any]) -> set[str]:
+def _food_recommendation_lookup(dashboard_payload: Dict[str, Any]) -> set:
     """Return normalized names of food_recommendations whose type is a food category."""
     items = dashboard_payload.get("food_recommendations")
     if not isinstance(items, list):
@@ -1221,8 +1221,8 @@ def _food_recommendation_lookup(dashboard_payload: dict[str, Any]) -> set[str]:
 
 
 def _sanitize_itinerary_costs(
-    dashboard_payload: dict[str, Any],
-    api_context: dict[str, Any] | None,
+    dashboard_payload: Dict[str, Any],
+    api_context: Optional[Dict[str, Any]],
 ) -> None:
     """Rules 5, 6: Null budget_eur for paid attractions, food stops, and transport with no API."""
     items = dashboard_payload.get("itinerary")
@@ -1280,7 +1280,7 @@ def _sanitize_itinerary_costs(
                     item["activity"] = f"{activity_raw} — check current price separately."
 
 
-def _ensure_minimum_itinerary(dashboard_payload: dict[str, Any]) -> None:
+def _ensure_minimum_itinerary(dashboard_payload: Dict[str, Any]) -> None:
     """If itinerary is empty after sanitization, generate a safe per-day fallback."""
     itinerary = dashboard_payload.get("itinerary")
     if isinstance(itinerary, list) and itinerary:
@@ -1297,7 +1297,7 @@ def _ensure_minimum_itinerary(dashboard_payload: dict[str, Any]) -> None:
             duration = 1
 
     duration = max(1, min(duration, 7))
-    fallback: list[dict[str, Any]] = []
+    fallback: List[Dict[str, Any]] = []
     for day in range(1, duration + 1):
         fallback.extend([
             {
@@ -1323,8 +1323,8 @@ def _ensure_minimum_itinerary(dashboard_payload: dict[str, Any]) -> None:
 
 
 def _sanitize_budget_breakdown(
-    dashboard_payload: dict[str, Any],
-    api_context: dict[str, Any] | None,
+    dashboard_payload: Dict[str, Any],
+    api_context: Optional[Dict[str, Any]],
     user_message: str,
 ) -> None:
     """Rules 6, 7: Null transport/accommodation costs when APIs are missing; compute total_known_cost."""
@@ -1351,7 +1351,7 @@ def _sanitize_budget_breakdown(
     bb["currency"] = bb.get("currency") or currency
 
     ag = dashboard_payload.setdefault("api_grounding", {"used_api": [], "missing_api": [], "warnings": []})
-    new_warnings: list[str] = []
+    new_warnings: List[str] = []
 
     # Rule 6: no transport API → null transport
     if not has_transport:
@@ -1413,7 +1413,7 @@ def _sanitize_budget_breakdown(
             bb[remaining_key] = round(max(0.0, budget - known_total))
             bb["within_budget"] = True
 
-        missing_parts: list[str] = []
+        missing_parts: List[str] = []
         if not has_transport:
             missing_parts.append("intercity transport")
         if not has_hotels and duration > 1:
@@ -1424,8 +1424,8 @@ def _sanitize_budget_breakdown(
 
 
 def _strip_invalid_exchange_rate(
-    dashboard_payload: dict[str, Any],
-    api_context: dict[str, Any] | None,
+    dashboard_payload: Dict[str, Any],
+    api_context: Optional[Dict[str, Any]],
 ) -> None:
     """Rule 8: Remove currency_exchange_rate: 0 — it is not meaningful without an FX API."""
     for key in ("currency_exchange_rate", "exchange_rate"):
@@ -1505,7 +1505,7 @@ def _add_static_grounding_warning(dashboard_payload: dict[str, Any]) -> None:
         warnings.insert(0, _STATIC_API_WARNING)
 
 
-def _sanitize_assistant_message(normalized: dict[str, Any], api_context: dict[str, Any] | None) -> None:
+def _sanitize_assistant_message(normalized: Dict[str, Any], api_context: Optional[Dict[str, Any]]) -> None:
     """Rule 9: Replace fake data claims; produce context-aware message for partial API contexts."""
     msg = normalized.get("assistant_message", "")
     if not isinstance(msg, str):
@@ -1571,7 +1571,7 @@ def _sanitize_assistant_message(normalized: dict[str, Any], api_context: dict[st
         )
 
 
-_API_FAMILIES: dict[str, frozenset[str]] = {
+_API_FAMILIES: Dict[str, frozenset] = {
     "flights": frozenset({"flights", "flight", "flight_api", "flights_api"}),
     "hotels": frozenset({"hotels", "hotel", "hotel_api", "hotels_api", "stay", "stay_api", "stays"}),
     "weather": frozenset({"weather", "weather_api", "weather_data"}),
@@ -1579,7 +1579,7 @@ _API_FAMILIES: dict[str, frozenset[str]] = {
 }
 
 
-def _remove_api_family(lst: list[str], api_name: str) -> None:
+def _remove_api_family(lst: List[str], api_name: str) -> None:
     """Remove all aliases belonging to api_name's family from lst in-place."""
     family = _API_FAMILIES.get(api_name, frozenset({api_name}))
     for alias in list(lst):
@@ -1611,7 +1611,7 @@ def _apply_api_truth(
         missing_api.append(api_name)
 
 
-def _canonical_list(value: Any, aliases: dict[str, str]) -> list[str]:
+def _canonical_list(value: Any, aliases: Dict[str, str]) -> List[str]:
     result: list[str] = []
     for item in _as_string_list(value):
         normalized = aliases.get(item.strip().lower(), item.strip().lower())
@@ -1620,7 +1620,7 @@ def _canonical_list(value: Any, aliases: dict[str, str]) -> list[str]:
     return result
 
 
-def _as_string_list(value: Any) -> list[str]:
+def _as_string_list(value: Any) -> List[str]:
     if value is None:
         return []
     if isinstance(value, list):
