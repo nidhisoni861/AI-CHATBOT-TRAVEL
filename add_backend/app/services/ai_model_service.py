@@ -342,7 +342,20 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                 "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
                 "food_recommendations": [],
                 "itinerary": [],
-                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": 0,
+                    "food": 0,
+                    "activities": 0,
+                    "accommodation": 0,
+                    "intercity_transport": 0,
+                    "total_known_cost": 0,
+                    "total": 0,
+                    "remaining_budget": 0,
+                    "within_budget": True,
+                    "note": None,
+                    "source": "empty_budget"
+                },
                 "dashboard_actions": ["show_weather"],
                 "assistant_message_source": "mock_model",
                 "api_grounding": {
@@ -355,7 +368,8 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
     
     # Itinerary intent detection (highest priority)
     if any(keyword in message_lower for keyword in itinerary_keywords):
-        return ChatResponse(
+        # Create mock itinerary response
+        mock_response = ChatResponse(
             session_id=request.session_id,
             selected_model=request.model_variant,
             adapter_loaded=False,  # Always false in mock mode
@@ -387,7 +401,7 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                     {"day": 1, "time": "Morning", "activity": "Arrival in Heidelberg", "budget_eur": 50},
                     {"day": 1, "time": "Afternoon", "activity": "City exploration", "budget_eur": 25}
                 ],
-                "budget_breakdown": {"currency": "EUR", "transport": 100, "food": 150, "activities": 75, "total": 325},
+                "budget_breakdown": {},
                 "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
                 "assistant_message_source": "mock_model",
                 "api_grounding": {
@@ -397,6 +411,13 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                 }
             }
         )
+        
+        # Apply budget calculation for mock itinerary response
+        mock_response.dashboard_payload['budget_breakdown'] = calculate_budget_breakdown(
+            mock_response.dashboard_payload
+        )
+        
+        return mock_response
     
     # Flight intent detection (lower priority - explicit flight words only)
     flight_keywords = ["flight", "fly", "airplane", "airport", "airfare", "ticket", "plane"]
@@ -450,7 +471,20 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                 "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
                 "food_recommendations": [],
                 "itinerary": [],
-                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": 0,
+                    "food": 0,
+                    "activities": 0,
+                    "accommodation": 0,
+                    "intercity_transport": 0,
+                    "total_known_cost": 0,
+                    "total": 0,
+                    "remaining_budget": 0,
+                    "within_budget": True,
+                    "note": None,
+                    "source": "empty_budget"
+                },
                 "dashboard_actions": ["show_flights"],
                 "assistant_message_source": "mock_model",
                 "api_grounding": {
@@ -492,7 +526,20 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                 "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
                 "food_recommendations": [],
                 "itinerary": [],
-                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": 0,
+                    "food": 0,
+                    "activities": 0,
+                    "accommodation": 0,
+                    "intercity_transport": 0,
+                    "total_known_cost": 0,
+                    "total": 0,
+                    "remaining_budget": 0,
+                    "within_budget": True,
+                    "note": None,
+                    "source": "empty_budget"
+                },
                 "dashboard_actions": ["show_hotels"],
                 "assistant_message_source": "mock_model",
                 "api_grounding": {
@@ -929,6 +976,12 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     # Final intent-based response cleanup using backend intent
     normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
     
+    # Apply budget calculation for itinerary_generation
+    if backend_intent == "itinerary_generation":
+        normalized["dashboard_payload"]["budget_breakdown"] = calculate_budget_breakdown(
+            normalized["dashboard_payload"]
+        )
+    
     logger.info("[GTR AFTER SANITIZE]")
 
     logger.info("[GTR RETURN] returning ChatResponse")
@@ -1190,10 +1243,17 @@ async def _build_direct_weather_response(request: ChatRequest, enriched_api_cont
             "itinerary": [],
             "budget_breakdown": {
                 "currency": "EUR",
-                "transport": None,
-                "intercity_transport": None,
+                "transport": 0,
+                "food": 0,
+                "activities": 0,
+                "accommodation": 0,
+                "intercity_transport": 0,
                 "total_known_cost": 0,
-                "note": None
+                "total": 0,
+                "remaining_budget": 0,
+                "within_budget": True,
+                "note": None,
+                "source": "empty_budget"
             },
             "dashboard_actions": ["show_weather"],
             "api_grounding": {
@@ -1501,6 +1561,109 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
     ]
 
 
+def parse_price_number(value, default=0):
+    """
+    Convert price strings like:
+    "$250-350" -> 250
+    "€25" -> 25
+    "€5-10" -> 5
+    30 -> 30
+    None -> default
+    """
+    if value is None:
+        return default
+
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    if not isinstance(value, str):
+        return default
+
+    import re
+    numbers = re.findall(r"\d+", value)
+    if not numbers:
+        return default
+
+    return int(numbers[0])
+
+
+def calculate_budget_breakdown(payload: dict) -> dict:
+    """
+    Calculate a stable budget_breakdown for frontend.
+    Always return numeric values, never null.
+    """
+    trip_summary = payload.get("trip_summary") or {}
+    duration_days = int(trip_summary.get("duration_days") or 1)
+    total_budget = parse_price_number(trip_summary.get("budget"), 500)
+
+    # 1. Transport from cheapest flight option
+    flights_section = payload.get("flights") or {}
+    flights_data = flights_section.get("data") or []
+
+    flight_prices = []
+    for flight in flights_data:
+        if isinstance(flight, dict):
+            flight_prices.append(parse_price_number(flight.get("price"), 0))
+
+    transport = min([p for p in flight_prices if p > 0], default=0)
+
+    # 2. Accommodation from cheapest hotel price_per_night * nights
+    hotels_section = payload.get("hotels") or {}
+    hotels_data = hotels_section.get("data") or []
+
+    hotel_prices = []
+    for hotel in hotels_data:
+        if isinstance(hotel, dict):
+            hotel_prices.append(parse_price_number(
+                hotel.get("price_per_night") or hotel.get("price") or hotel.get("total_cost"),
+                0
+            ))
+
+    nights = max(duration_days - 1, 1)
+    accommodation = min([p for p in hotel_prices if p > 0], default=0) * nights
+
+    # 3. Food from food_recommendations price_range
+    food_items = payload.get("food_recommendations") or []
+    food_daily_estimates = []
+
+    for item in food_items:
+        if isinstance(item, dict):
+            food_daily_estimates.append(parse_price_number(item.get("price_range"), 0))
+
+    if food_daily_estimates:
+        food = sum(food_daily_estimates) * duration_days
+    else:
+        food = 25 * duration_days
+
+    # 4. Activities from itinerary budget_eur
+    itinerary = payload.get("itinerary") or []
+    activities = 0
+
+    for item in itinerary:
+        if isinstance(item, dict):
+            activities += parse_price_number(item.get("budget_eur"), 0)
+
+    # 5. Total
+    total_known_cost = transport + accommodation + food + activities
+    remaining_budget = total_budget - total_known_cost
+
+    return {
+        "currency": trip_summary.get("currency") or "EUR",
+        "transport": transport,
+        "food": food,
+        "activities": activities,
+        "accommodation": accommodation,
+        "intercity_transport": transport,
+        "total_known_cost": total_known_cost,
+        "total": total_known_cost,
+        "remaining_budget": remaining_budget,
+        "remaining_budget_before_transport_and_accommodation": total_budget - food - activities,
+        "within_budget": remaining_budget >= 0,
+        "note": "Budget is estimated from available flight, hotel, food and itinerary data.",
+        "source": "backend_budget_calculation"
+    }
+
+
 def normalize_hotels_result(hotel_result):
     """Normalize hotel service result to list format"""
     if not hotel_result:
@@ -1583,10 +1746,17 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
                 "map_data": {},
                 "budget_breakdown": {
                     "currency": "EUR",
-                    "transport": None,
-                    "intercity_transport": None,
+                    "transport": 0,
+                    "food": 0,
+                    "activities": 0,
+                    "accommodation": 0,
+                    "intercity_transport": 0,
                     "total_known_cost": 0,
-                    "note": None
+                    "total": 0,
+                    "remaining_budget": 0,
+                    "within_budget": True,
+                    "note": None,
+                    "source": "empty_budget"
                 },
                 "dashboard_actions": ["show_hotels"],
                 "api_grounding": {
@@ -1680,10 +1850,17 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
             "map_data": {},
             "budget_breakdown": {
                 "currency": "EUR",
-                "transport": None,
-                "intercity_transport": None,
+                "transport": 0,
+                "food": 0,
+                "activities": 0,
+                "accommodation": 0,
+                "intercity_transport": 0,
                 "total_known_cost": 0,
-                "note": None
+                "total": 0,
+                "remaining_budget": 0,
+                "within_budget": True,
+                "note": None,
+                "source": "empty_budget"
             },
             "dashboard_actions": ["show_hotels"],
             "api_grounding": {
@@ -1811,10 +1988,17 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
                 "itinerary": [],
                 "budget_breakdown": {
                     "currency": "EUR",
-                    "transport": None,
-                    "intercity_transport": None,
+                    "transport": 0,
+                    "food": 0,
+                    "activities": 0,
+                    "accommodation": 0,
+                    "intercity_transport": 0,
                     "total_known_cost": 0,
-                    "note": None
+                    "total": 0,
+                    "remaining_budget": 0,
+                    "within_budget": True,
+                    "note": None,
+                    "source": "empty_budget"
                 },
                 "dashboard_actions": ["show_flights"],
                 "api_grounding": {
@@ -1879,10 +2063,17 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             "itinerary": [],
             "budget_breakdown": {
                 "currency": "EUR",
-                "transport": None,
-                "intercity_transport": None,
+                "transport": 0,
+                "food": 0,
+                "activities": 0,
+                "accommodation": 0,
+                "intercity_transport": 0,
                 "total_known_cost": 0,
-                "note": None
+                "total": 0,
+                "remaining_budget": 0,
+                "within_budget": True,
+                "note": None,
+                "source": "empty_budget"
             },
             "dashboard_actions": ["show_flights"],
             "api_grounding": {
@@ -1928,10 +2119,17 @@ def _build_flight_validation_response(request: ChatRequest, origin: str, destina
             "itinerary": [],
             "budget_breakdown": {
                 "currency": "EUR",
-                "transport": None,
-                "intercity_transport": None,
+                "transport": 0,
+                "food": 0,
+                "activities": 0,
+                "accommodation": 0,
+                "intercity_transport": 0,
                 "total_known_cost": 0,
-                "note": None
+                "total": 0,
+                "remaining_budget": 0,
+                "within_budget": True,
+                "note": None,
+                "source": "empty_budget"
             },
             "dashboard_actions": ["show_flights"],
             "api_grounding": {
