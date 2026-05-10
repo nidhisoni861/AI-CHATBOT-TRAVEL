@@ -1680,59 +1680,107 @@ def calculate_budget_breakdown(payload: dict) -> dict:
     """
     Calculate a stable budget_breakdown for frontend.
     Always return numeric values, never null.
+    Intent-aware calculation for different response types.
     """
+    intent = payload.get("intent")
     trip_summary = payload.get("trip_summary") or {}
     duration_days = int(trip_summary.get("duration_days") or 1)
     total_budget = parse_price_number(trip_summary.get("budget"), 500)
 
-    # 1. Transport from cheapest flight option
-    flights_section = payload.get("flights") or {}
-    flights_data = flights_section.get("data") or []
-
-    flight_prices = []
-    for flight in flights_data:
-        if isinstance(flight, dict):
-            flight_prices.append(parse_price_number(flight.get("price"), 0))
-
-    transport = min([p for p in flight_prices if p > 0], default=0)
-
-    # 2. Accommodation from cheapest hotel price_per_night * nights
-    hotels_section = payload.get("hotels") or {}
-    hotels_data = hotels_section.get("data") or []
-
-    hotel_prices = []
-    for hotel in hotels_data:
-        if isinstance(hotel, dict):
-            hotel_prices.append(parse_price_number(
-                hotel.get("price_per_night") or hotel.get("price") or hotel.get("total_cost"),
-                0
-            ))
-
-    nights = max(duration_days - 1, 1)
-    accommodation = min([p for p in hotel_prices if p > 0], default=0) * nights
-
-    # 3. Food from food_recommendations price_range
-    food_items = payload.get("food_recommendations") or []
-    food_daily_estimates = []
-
-    for item in food_items:
-        if isinstance(item, dict):
-            food_daily_estimates.append(parse_price_number(item.get("price_range"), 0))
-
-    if food_daily_estimates:
-        food = sum(food_daily_estimates) * duration_days
-    else:
-        food = 25 * duration_days
-
-    # 4. Activities from itinerary budget_eur
-    itinerary = payload.get("itinerary") or []
+    # Default values
+    transport = 0
+    accommodation = 0
+    food = 0
     activities = 0
+    note = "Budget is estimated from available data."
 
-    for item in itinerary:
-        if isinstance(item, dict):
-            activities += parse_price_number(item.get("budget_eur"), 0)
+    if intent == "flight_search":
+        # Flight-only: calculate only transport
+        flights_section = payload.get("flights") or {}
+        flights_data = flights_section.get("data") or []
 
-    # 5. Total
+        flight_prices = []
+        for flight in flights_data:
+            if isinstance(flight, dict):
+                flight_prices.append(parse_price_number(flight.get("price"), 0))
+
+        transport = min([p for p in flight_prices if p > 0], default=0)
+        note = "Budget is estimated from available flight data."
+
+    elif intent == "hotel_search":
+        # Hotel-only: calculate only accommodation
+        hotels_section = payload.get("hotels") or {}
+        hotels_data = hotels_section.get("data") or []
+
+        hotel_prices = []
+        for hotel in hotels_data:
+            if isinstance(hotel, dict):
+                hotel_prices.append(parse_price_number(
+                    hotel.get("price_per_night") or hotel.get("price") or hotel.get("total_cost"),
+                    0
+                ))
+
+        # For hotel search, assume 1 night if duration_days not available
+        nights = max(duration_days, 1)
+        accommodation = min([p for p in hotel_prices if p > 0], default=0) * nights
+        note = "Budget is estimated from available hotel data."
+
+    elif intent == "itinerary_generation":
+        # Full itinerary: calculate all components
+        # 1. Transport from cheapest flight option
+        flights_section = payload.get("flights") or {}
+        flights_data = flights_section.get("data") or []
+
+        flight_prices = []
+        for flight in flights_data:
+            if isinstance(flight, dict):
+                flight_prices.append(parse_price_number(flight.get("price"), 0))
+
+        transport = min([p for p in flight_prices if p > 0], default=0)
+
+        # 2. Accommodation from cheapest hotel price_per_night * nights
+        hotels_section = payload.get("hotels") or {}
+        hotels_data = hotels_section.get("data") or []
+
+        hotel_prices = []
+        for hotel in hotels_data:
+            if isinstance(hotel, dict):
+                hotel_prices.append(parse_price_number(
+                    hotel.get("price_per_night") or hotel.get("price") or hotel.get("total_cost"),
+                    0
+                ))
+
+        nights = max(duration_days - 1, 1)
+        accommodation = min([p for p in hotel_prices if p > 0], default=0) * nights
+
+        # 3. Food from food_recommendations price_range
+        food_items = payload.get("food_recommendations") or []
+        food_daily_estimates = []
+
+        for item in food_items:
+            if isinstance(item, dict):
+                food_daily_estimates.append(parse_price_number(item.get("price_range"), 0))
+
+        if food_daily_estimates:
+            food = sum(food_daily_estimates) * duration_days
+        else:
+            food = 25 * duration_days
+
+        # 4. Activities from itinerary budget_eur
+        itinerary = payload.get("itinerary") or []
+        activities = 0
+
+        for item in itinerary:
+            if isinstance(item, dict):
+                activities += parse_price_number(item.get("budget_eur"), 0)
+
+        note = "Budget is estimated from available flight, hotel, food and itinerary data."
+
+    elif intent == "weather_query":
+        # Weather-only: zero budget
+        note = "No budget calculation for weather queries."
+
+    # 5. Total calculation
     total_known_cost = transport + accommodation + food + activities
     remaining_budget = total_budget - total_known_cost
 
@@ -1748,7 +1796,7 @@ def calculate_budget_breakdown(payload: dict) -> dict:
         "remaining_budget": remaining_budget,
         "remaining_budget_before_transport_and_accommodation": total_budget - food - activities,
         "within_budget": remaining_budget >= 0,
-        "note": "Budget is estimated from available flight, hotel, food and itinerary data.",
+        "note": note,
         "source": "backend_budget_calculation"
     }
 
@@ -2014,6 +2062,38 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
     
     logger.info("[HOTEL SOURCE] %s", hotel_source)
     
+    # Build payload first, then calculate budget
+    payload = {
+        "schema_version": "travel_dashboard_v1",
+        "intent": "hotel_search",
+        "trip_summary": {
+            "destination": destination,
+            "source": "backend_extraction"
+        },
+        "flight": None,
+        "stay_recommendations": [],
+        "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+        "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+        "hotels": {
+            "data": hotels_list,
+            "source": hotel_source,
+            "status": "available"
+        },
+        "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+        "food_recommendations": [],
+        "itinerary": [],
+        "map_data": {},
+        "dashboard_actions": ["show_hotels"],
+        "api_grounding": {
+            "used_api": used_apis,
+            "missing_api": missing_apis,
+            "warnings": warnings
+        }
+    }
+    
+    # Calculate budget breakdown for hotel search
+    payload["budget_breakdown"] = calculate_budget_breakdown(payload)
+    
     return ChatResponse(
         session_id=request.session_id,
         selected_model=selected_model,
@@ -2022,47 +2102,7 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
         fallback_used=False,
         retry_used=False,
         assistant_message=assistant_message,
-        dashboard_payload={
-            "schema_version": "travel_dashboard_v1",
-            "intent": "hotel_search",
-            "trip_summary": {
-                "destination": destination,
-                "source": "backend_extraction"
-            },
-            "flight": None,
-            "stay_recommendations": [],
-            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
-            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
-            "hotels": {
-                "data": hotels_list,
-                "source": hotel_source,
-                "status": "available"
-            },
-            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
-            "food_recommendations": [],
-            "itinerary": [],
-            "map_data": {},
-            "budget_breakdown": {
-                "currency": "EUR",
-                "transport": 0,
-                "food": 0,
-                "activities": 0,
-                "accommodation": 0,
-                "intercity_transport": 0,
-                "total_known_cost": 0,
-                "total": 0,
-                "remaining_budget": 0,
-                "within_budget": True,
-                "note": None,
-                "source": "empty_budget"
-            },
-            "dashboard_actions": ["show_hotels"],
-            "api_grounding": {
-                "used_api": used_apis,
-                "missing_api": missing_apis,
-                "warnings": warnings
-            }
-        },
+        dashboard_payload=payload,
         raw_model_output=raw_model_output
     )
 
@@ -2229,6 +2269,36 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     if request.include_raw_model_output:
         response_kwargs["raw_model_output"] = raw_output
     
+    # Build payload first, then calculate budget
+    payload = {
+        "schema_version": "travel_dashboard_v1",
+        "intent": "flight_search",
+        "trip_summary": {
+            "origin": origin,
+            "destination": destination,
+            "source": "backend_extraction"
+        },
+        "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+        "flights": {
+            "data": flights_list,
+            "source": flights_source,
+            "status": flights_status
+        },
+        "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+        "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+        "food_recommendations": [],
+        "itinerary": [],
+        "dashboard_actions": ["show_flights"],
+        "api_grounding": {
+            "used_api": used_apis,
+            "missing_api": missing_apis,
+            "warnings": warnings
+        }
+    }
+    
+    # Calculate budget breakdown for flight search
+    payload["budget_breakdown"] = calculate_budget_breakdown(payload)
+    
     return ChatResponse(
         session_id=request.session_id,
         selected_model=selected_model,
@@ -2237,45 +2307,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         fallback_used=False,
         retry_used=False,
         assistant_message=assistant_message,
-        dashboard_payload={
-            "schema_version": "travel_dashboard_v1",
-            "intent": "flight_search",
-            "trip_summary": {
-                "origin": origin,
-                "destination": destination,
-                "source": "backend_extraction"
-            },
-            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
-            "flights": {
-                "data": flights_list,
-                "source": flights_source,
-                "status": flights_status
-            },
-            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
-            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
-            "food_recommendations": [],
-            "itinerary": [],
-            "budget_breakdown": {
-                "currency": "EUR",
-                "transport": 0,
-                "food": 0,
-                "activities": 0,
-                "accommodation": 0,
-                "intercity_transport": 0,
-                "total_known_cost": 0,
-                "total": 0,
-                "remaining_budget": 0,
-                "within_budget": True,
-                "note": None,
-                "source": "empty_budget"
-            },
-            "dashboard_actions": ["show_flights"],
-            "api_grounding": {
-                "used_api": used_apis,
-                "missing_api": missing_apis,
-                "warnings": warnings
-            }
-        },
+        dashboard_payload=payload,
         **response_kwargs,
     )
 
