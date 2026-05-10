@@ -409,6 +409,8 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
 
 
 async def generate_travel_response(request: ChatRequest) -> ChatResponse:
+    logger.info("[GTR START] generate_travel_response entered")
+    
     # Startup logging
     try:
         git_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], 
@@ -437,6 +439,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     # Use mock mode if enabled
     if MOCK_MODEL:
         logger.info("Using mock model mode for local testing")
+        logger.info("[GTR RETURN] mock ChatResponse")
         return _build_intent_aware_mock_response(request, enriched_api_context)
     
     # Real model generation
@@ -624,41 +627,6 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
         # Multi-service or general request: keep full structure
         return payload
 
-    # Update assistant_message_source based on model variant
-    assistant_message_source = "mock_model"
-    if not MOCK_MODEL:
-        if request.model_variant == "fine_tuned":
-            assistant_message_source = "fine_tuned_model"
-        elif request.model_variant == "base":
-            assistant_message_source = "base_model"
-        else:
-            assistant_message_source = "model_generated"
-    
-    # Update assistant_message_source in dashboard_payload
-    normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
-    
-    # Final intent-based response cleanup
-    cleaned_payload = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
-    
-    # Safety check: ensure cleaned payload is not None
-    if cleaned_payload is None:
-        logger.error("[SANITIZE] enforce_intent_specific_dashboard returned None")
-        cleaned_payload = normalized["dashboard_payload"]  # Fallback to original
-    
-    normalized["dashboard_payload"] = cleaned_payload
-
-    logger.info(f"[RETURN] About to return ChatResponse with parse_success={parse_success}, fallback_used={fallback_used}")
-    return ChatResponse(
-        session_id=request.session_id,
-        selected_model=request.model_variant,
-        adapter_loaded=request.model_variant == "fine_tuned",
-        parse_success=parse_success,
-        fallback_used=fallback_used,
-        retry_used=retry_used,
-        assistant_message=normalized["assistant_message"],
-        dashboard_payload=normalized["dashboard_payload"],
-        **raw_kwargs,
-    )
 
 def _get_model(variant: ModelVariant, config: AdapterConfig):
     global _loaded_model
