@@ -51,6 +51,8 @@ backend/.env
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.local
+!.env.local.example
 !/backend_fine_tuning/.env.example
 !/backend_fine_tuning/fine_tuning/configs/model_config.example.env
 /backend_fine_tuning/.env
