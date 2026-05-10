@@ -544,6 +544,10 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     """
     intent = payload.get("intent", "")
     
+    # Safety check: ensure payload is not None
+    if not payload or not isinstance(payload, dict):
+        return payload
+    
     if intent == "weather_query":
         # Weather-only response: keep only weather data
         return {
@@ -622,7 +626,14 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
     
     # Final intent-based response cleanup
-    normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
+    cleaned_payload = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
+    
+    # Safety check: ensure cleaned payload is not None
+    if cleaned_payload is None:
+        logger.error("[SANITIZE] enforce_intent_specific_dashboard returned None")
+        cleaned_payload = normalized["dashboard_payload"]  # Fallback to original
+    
+    normalized["dashboard_payload"] = cleaned_payload
 
     return ChatResponse(
         session_id=request.session_id,
