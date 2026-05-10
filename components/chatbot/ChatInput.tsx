@@ -28,7 +28,7 @@ export function ChatInput({
   }
 
   return (
-    <footer className="mt-4 rounded-[22px] border border-white/15 bg-white/8 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] sm:mt-5 sm:p-2">
+    <footer className="mt-4 rounded-[22px] border border-white/40 bg-white p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.18)] sm:mt-5 sm:p-2">
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* New chat */}
         <button
@@ -36,7 +36,7 @@ export function ChatInput({
           aria-label="New chat"
           onClick={onNewChat}
           disabled={loading}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm transition hover:bg-white/30 hover:text-teal-200 disabled:opacity-50 sm:h-11 sm:w-11"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-50 text-teal-700 shadow-sm transition hover:bg-teal-100 disabled:opacity-50 sm:h-11 sm:w-11"
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -45,7 +45,7 @@ export function ChatInput({
         <button
           type="button"
           aria-label="Attach files"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-600 transition hover:text-teal-700 sm:h-11 sm:w-11"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:text-teal-700 sm:h-11 sm:w-11"
         >
           <Paperclip className="h-5 w-5" />
         </button>
@@ -55,10 +55,10 @@ export function ChatInput({
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={isRecording ? "Listening…" : "Ask anything about travel..."}
+          placeholder={isRecording ? "Listening…" : "Ask anything about travel"}
           rows={1}
           disabled={loading}
-          className="min-w-0 flex-1 resize-none bg-transparent px-2 text-sm font-medium text-white placeholder-white/50 focus:outline-none disabled:opacity-50"
+          className="min-w-0 flex-1 resize-none bg-transparent px-2 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none disabled:opacity-50"
         />
 
         {/* Mic / STT button */}
@@ -70,7 +70,7 @@ export function ChatInput({
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm transition sm:h-11 sm:w-11 ${
             isRecording
               ? "animate-pulse bg-red-500 text-white"
-              : "bg-white/20 text-white hover:text-teal-200"
+              : "bg-teal-50 text-teal-700 hover:bg-teal-100"
           }`}
         >
           {isRecording ? (
