@@ -577,12 +577,11 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     try:
         # Try parsing original first
         try:
-            parsed = json.loads(raw_text)
-        except json.JSONDecodeError:
-            # Try repair
-            repaired = repair_model_json(raw_text)
-            logger.info("[JSON REPAIRED] %s", repaired)
-            parsed = json.loads(repaired)
+            parsed = parse_model_json_with_repair(raw_text)
+        except Exception as original_exc:
+            logger.info("[MODEL JSON REPAIR NEEDED] %s", str(original_exc))
+            logger.error("[MODEL JSON REPAIR FAILED] %s", str(original_exc))
+            raise original_exc
         
         # Extract dashboard payload if nested
         if "dashboard_payload" in parsed:
@@ -605,6 +604,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         parse_success = True
         logger.info("[GTR AFTER NORMALIZE]")
         logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
+        logger.info("[RETURNING MODEL NORMALIZED RESPONSE] parse_success=True fallback_used=False")
         
     except Exception as exc:
         # Log the actual validation error for debugging
@@ -754,30 +754,86 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     )
 
 
-def repair_model_json(raw_text: str) -> str:
-    """Repair common JSON formatting issues in model output"""
+def parse_model_json_with_repair(raw_text: str) -> dict:
+    """Parse model JSON with robust repair logic"""
     if not raw_text:
-        return raw_text
+        raise ValueError("Empty model output")
+
+    import json
 
     text = raw_text.strip()
 
     # Remove markdown fences
     text = text.replace("```json", "").replace("```", "").strip()
 
-    # Trim before first { and after last }
+    # First try direct parse
+    try:
+        parsed = json.loads(text)
+        # Sometimes model output is a JSON string containing JSON
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        return parsed
+    except Exception:
+        pass
+
+    logger.info("[MODEL JSON REPAIR ATTEMPT]")
+
+    # If output is accidentally quoted as a whole string, unquote once
+    if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+        try:
+            text = json.loads(text)
+        except Exception:
+            text = text[1:-1]
+
+    # Trim before first JSON object
     first = text.find("{")
-    last = text.rfind("}")
-    if first != -1 and last != -1 and last > first:
-        text = text[first:last + 1]
+    if first != -1:
+        text = text[first:]
 
-    # Remove accidental trailing quote after final brace
-    if text.endswith('}"') and text.count("{") <= text.count("}"):
-        text = text[:-1]
+    # Remove accidental trailing quote after final brace/array
+    # Example: ... }]}"  should become ... }]
+    while len(text) > 1 and text.endswith('"') and text[-2] in ("}", "]"):
+        text = text[:-1].strip()
 
-    # Fix common trailing commas before closing braces
+    # Remove common trailing comma issues
     text = text.replace(",}", "}").replace(",]", "]")
 
-    return text
+    # Balance braces while ignoring braces inside strings
+    open_braces = 0
+    in_string = False
+    escape = False
+
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+
+        if ch == "\\":
+            escape = True
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+            continue
+
+        if not in_string:
+            if ch == "{":
+                open_braces += 1
+            elif ch == "}":
+                open_braces -= 1
+
+    if open_braces > 0:
+        text += "}" * open_braces
+
+    logger.info("[MODEL JSON REPAIRED TEXT] %s", text)
+
+    parsed = json.loads(text)
+
+    if isinstance(parsed, str):
+        parsed = json.loads(parsed)
+
+    logger.info("[MODEL JSON REPAIR SUCCESS]")
+    return parsed
 
 
 def extract_live_section(api_context: dict, section: str):
