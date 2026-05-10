@@ -2305,7 +2305,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         flights_list = fallback_flights
     
     if request.include_raw_model_output:
-        response_kwargs["raw_model_output"] = f"Direct flight response: budget transport={transport_cost}"
+        response_kwargs["raw_model_output"] = f"Direct flight response: live API budget transport={transport_cost}"
     
     # Build payload first, then calculate budget
     payload = {
@@ -2335,7 +2335,8 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     }
     
     flight_prices = []
-    for flight in flights_list:
+
+    for flight in payload.get("flights", {}).get("data", []):
         if isinstance(flight, dict):
             price_text = str(flight.get("price", ""))
             numbers = re.findall(r"\d+", price_text)
@@ -2344,28 +2345,27 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
 
     transport_cost = min(flight_prices) if flight_prices else 0
 
-    flight_budget_breakdown = {
-        "currency": "EUR",
-        "transport": transport_cost,
-        "food": 0,
-        "activities": 0,
-        "accommodation": 0,
-        "intercity_transport": transport_cost,
-        "total_known_cost": transport_cost,
-        "total": transport_cost,
-        "remaining_budget": 500 - transport_cost,
-        "remaining_budget_before_transport_and_accommodation": 500,
-        "within_budget": (500 - transport_cost) >= 0,
-        "note": "Budget is estimated from available flight data.",
-        "source": "backend_budget_calculation"
-    }
+payload["budget_breakdown"] = {
+    "currency": "EUR",
+    "transport": transport_cost,
+    "food": 0,
+    "activities": 0,
+    "accommodation": 0,
+    "intercity_transport": transport_cost,
+    "total_known_cost": transport_cost,
+    "total": transport_cost,
+    "remaining_budget": 500 - transport_cost,
+    "remaining_budget_before_transport_and_accommodation": 500,
+    "within_budget": (500 - transport_cost) >= 0,
+    "note": "Budget is estimated from available flight data.",
+    "source": "backend_budget_calculation"
+}
 
-    logger.info("[DIRECT FLIGHT PRICE VALUES] %s", [f.get("price") for f in flights_list if isinstance(f, dict)])
-    logger.info("[DIRECT FLIGHT PRICE NUMBERS] %s", flight_prices)
-    logger.info("[DIRECT FLIGHT TRANSPORT COST] %s", transport_cost)
+    logger.info("[LIVE FLIGHT PAYLOAD DATA] %s", payload.get("flights", {}).get("data", []))
+    logger.info("[LIVE FLIGHT PRICE STRINGS] %s", [f.get("price") for f in payload.get("flights", {}).get("data", []) if isinstance(f, dict)])
+    logger.info("[LIVE FLIGHT PRICE_NUMBERS] %s", flight_prices)
+    logger.info("[LIVE FLIGHT TRANSPORT_COST] %s", transport_cost)
 
-    payload["budget_breakdown"] = flight_budget_breakdown
-    
     return ChatResponse(
         session_id=request.session_id,
         selected_model=selected_model,
