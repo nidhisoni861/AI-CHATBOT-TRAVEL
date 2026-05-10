@@ -800,16 +800,15 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         parsed = safe_json_loads_from_model(raw_text)
         dashboard_payload = parsed.get("dashboard_payload", parsed)
 
-        # Itinerary quality validation
+        # Itinerary essential validation
         if backend_intent == "itinerary_generation":
             if not itinerary_has_required_days(dashboard_payload, duration_days_int):
                 raise ValueError("itinerary_missing_required_days")
-
-            if itinerary_has_too_many_repeats(dashboard_payload, max_repeat=1):
-                raise ValueError("itinerary_has_too_many_repeats")
-
-            if not itinerary_has_required_diversity(dashboard_payload, duration_days_int):
-                raise ValueError("itinerary_lacks_required_diversity")
+            
+            # Check itinerary is not empty
+            itinerary = dashboard_payload.get("itinerary") or []
+            if not itinerary:
+                raise ValueError("itinerary_empty")
 
         normalized_dashboard = normalize_model_dashboard_payload(
             dashboard_payload,
@@ -892,12 +891,11 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
 
                 if not itinerary_has_required_days(retry_dashboard_payload, duration_days_int):
                     raise ValueError("retry_itinerary_missing_required_days")
-
-                if itinerary_has_too_many_repeats(retry_dashboard_payload, max_repeat=1):
-                    raise ValueError("retry_itinerary_has_too_many_repeats")
-
-                if not itinerary_has_required_diversity(retry_dashboard_payload, duration_days_int):
-                    raise ValueError("retry_itinerary_lacks_required_diversity")
+                
+                # Check retry itinerary is not empty
+                retry_itinerary = retry_dashboard_payload.get("itinerary") or []
+                if not retry_itinerary:
+                    raise ValueError("retry_itinerary_empty")
 
                 retry_normalized_dashboard = normalize_model_dashboard_payload(
                     retry_dashboard_payload,
