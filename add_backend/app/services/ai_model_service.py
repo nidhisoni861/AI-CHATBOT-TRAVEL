@@ -438,6 +438,10 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     tokenizer, model = _get_model(request.model_variant, config)
     prompt = _build_prompt(request.message, enriched_api_context)
     raw_text = generate_text(tokenizer, model, prompt, config)
+    
+    # Log raw model output if requested
+    if request.include_raw_model_output:
+        logger.info(f"[RAW MODEL OUTPUT] {raw_text}")
 
     parse_success = False
     fallback_used = False

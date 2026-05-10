@@ -50,6 +50,51 @@ async def chat_post(chat_request: ChatRequest) -> ChatResponse:
     
     try:
         response = await generate_travel_response(chat_request)
+        
+        # Guard against None response
+        if response is None:
+            logger.error("[GENERATE RESPONSE] generate_travel_response returned None")
+            # Build proper fallback response using actual request values
+            selected_model = chat_request.model_variant or getattr(chat_request, 'selected_model', 'base')
+            adapter_loaded = selected_model == "fine_tuned"
+            
+            logger.info(f"[FALLBACK] Using session_id={chat_request.session_id}")
+            logger.info(f"[FALLBACK] Using selected_model={selected_model}")
+            logger.info(f"[FALLBACK] Using adapter_loaded={adapter_loaded}")
+            
+            fallback_response = ChatResponse(
+                session_id=chat_request.session_id,
+                selected_model=selected_model,
+                adapter_loaded=adapter_loaded,
+                parse_success=False,
+                fallback_used=True,
+                retry_used=False,
+                assistant_message="generate_travel_response returned None - possible model generation failure",
+                dashboard_payload={
+                    "schema_version": "travel_dashboard_v1",
+                    "intent": "error",
+                    "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                    "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                    "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                    "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                    "food_recommendations": [],
+                    "itinerary": [],
+                    "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                    "dashboard_actions": ["show_error"],
+                    "api_grounding": {
+                        "used_api": [],
+                        "missing_api": ["weather", "flights", "hotels", "events"],
+                        "warnings": ["generate_travel_response returned None"]
+                    }
+                }
+            )
+            
+            # Add raw model output if requested
+            if chat_request.include_raw_model_output:
+                fallback_response.raw_model_output = "generate_travel_response returned None"
+                
+            return fallback_response
+        
         logger.info(f"[GENERATE RESPONSE SUCCESS] parse_success={response.parse_success}, fallback_used={response.fallback_used}")
         return response
     except Exception as exc:
