@@ -2134,6 +2134,24 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
     adapter_loaded = selected_model == "fine_tuned"
     
+    # Initialize budget variables with defaults
+    transport_cost = 0
+    flight_budget_breakdown = {
+        "currency": "EUR",
+        "transport": 0,
+        "food": 0,
+        "activities": 0,
+        "accommodation": 0,
+        "intercity_transport": 0,
+        "total_known_cost": 0,
+        "total": 0,
+        "remaining_budget": 500,
+        "remaining_budget_before_transport_and_accommodation": 500,
+        "within_budget": True,
+        "note": "Budget is estimated from available flight data.",
+        "source": "backend_budget_calculation"
+    }
+    
     # Get travel_info from enriched context at function scope
     travel_info = enriched_api_context.get("travel_info", {})
     
