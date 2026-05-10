@@ -22,14 +22,34 @@ function initialMessage(): ChatMessage {
     role: "assistant",
     text: "New chat started ✨\n\nTell me your destination, travel dates, budget, and travel style. I'll build your trip plan.",
     time: makeTimestamp(),
+    detectedLang: "en",
   };
 }
+
+// ─── Translation helpers ──────────────────────────────────────────────────────
+
+async function translateText(
+  text: string,
+  targetLang: string
+): Promise<{ translated: string; detectedLang: string }> {
+  const res = await fetch("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, targetLang }),
+  });
+  if (!res.ok) return { translated: text, detectedLang: targetLang };
+  return res.json() as Promise<{ translated: string; detectedLang: string }>;
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ChatBotPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage()]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const sessionId = useRef(`session-${Date.now()}`);
+  // Language detected from the most recent voice input (Whisper gives this for free)
+  const pendingVoiceLang = useRef<string | null>(null);
 
   const { voiceEnabled, isRecording, speak, toggleVoice, toggleRecording } =
     useVoice();
@@ -39,11 +59,16 @@ export default function ChatBotPanel() {
     sessionId.current = `session-${Date.now()}`;
     setMessages([initialMessage()]);
     setInput("");
+    pendingVoiceLang.current = null;
   }
 
   async function sendMessage(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg || loading) return;
+
+    // Grab and clear the voice-detected language before any state updates
+    const voiceLang = pendingVoiceLang.current;
+    pendingVoiceLang.current = null;
 
     setMessages((prev) => [
       ...prev.filter((m) => m.id !== "init"),
@@ -53,33 +78,67 @@ export default function ChatBotPanel() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
+      // ── Step 1: Detect language & translate user message to English ──────────
+      let detectedLang = voiceLang ?? "en";
+      let msgForBackend = msg;
+
+      if (voiceLang && voiceLang !== "en") {
+        // Whisper already told us the language — just translate to English
+        const { translated } = await translateText(msg, "en");
+        msgForBackend = translated;
+      } else if (!voiceLang) {
+        // Typed text — detect language + translate in one call
+        const result = await translateText(msg, "en");
+        detectedLang = result.detectedLang;
+        msgForBackend = detectedLang !== "en" ? result.translated : msg;
+      }
+
+      // ── Step 2: Send English to YOUR travel backend (unchanged) ─────────────
+      const backendRes = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, session_id: sessionId.current }),
+        body: JSON.stringify({
+          message: msgForBackend,
+          session_id: sessionId.current,
+        }),
       });
+      if (!backendRes.ok) throw new Error("Backend error");
 
-      if (!res.ok) throw new Error("Backend error");
+      const backendData = await backendRes.json() as {
+        assistant_message?: string;
+        dashboard_payload?: unknown;
+        fallback_used?: boolean;
+        parse_success?: boolean;
+      };
+      const englishResponse =
+        backendData.assistant_message ??
+        "I couldn't process that. Please try again.";
 
-      const data = await res.json();
-      const assistantText =
-        data.assistant_message ?? "I couldn't process that. Please try again.";
+      // ── Step 3: Translate backend response back to detected language ─────────
+      let displayResponse = englishResponse;
+      if (detectedLang !== "en") {
+        const { translated } = await translateText(englishResponse, detectedLang);
+        displayResponse = translated;
+      }
 
+      // ── Step 4: Display & speak ──────────────────────────────────────────────
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "assistant",
-          text: assistantText,
+          text: displayResponse,
           time: makeTimestamp(),
-          dashboard: data.dashboard_payload ?? null,
+          detectedLang,
+          dashboard: (backendData.dashboard_payload as ChatMessage["dashboard"]) ?? null,
           showDashboard:
-            !data.fallback_used && data.parse_success && !!data.dashboard_payload,
+            !backendData.fallback_used &&
+            backendData.parse_success &&
+            !!backendData.dashboard_payload,
         },
       ]);
 
-      // Speak assistant reply if voice is on
-      speak(assistantText);
+      speak(displayResponse, detectedLang);
     } catch {
       const errorText =
         "Something went wrong. Please check if the backend is running.";
@@ -90,17 +149,21 @@ export default function ChatBotPanel() {
           role: "assistant",
           text: errorText,
           time: makeTimestamp(),
+          detectedLang: "en",
         },
       ]);
-      speak(errorText);
+      speak(errorText, "en");
     } finally {
       setLoading(false);
     }
   }
 
   function handleToggleRecording() {
-    // On recognition result → fill the input field
-    toggleRecording((transcript) => setInput(transcript));
+    toggleRecording((transcript, detectedLang) => {
+      // Called by Whisper when transcription is ready
+      setInput(transcript);
+      pendingVoiceLang.current = detectedLang;
+    });
   }
 
   return (

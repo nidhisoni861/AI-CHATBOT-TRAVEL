@@ -1,5 +1,5 @@
 import { KeyboardEvent } from "react";
-import { Mic, MicOff, Paperclip, Plus, Send } from "lucide-react";
+import { Loader2, Mic, MicOff, Paperclip, Plus, Send } from "lucide-react";
 
 interface ChatInputProps {
   input: string;
@@ -25,6 +25,12 @@ export function ChatInput({
       e.preventDefault();
       onSend();
     }
+  }
+
+  function getPlaceholder() {
+    if (isRecording && !input) return "Listening… click mic again to stop";
+    if (isRecording && input) return "Transcribing…";
+    return "Ask anything about travel...";
   }
 
   return (
@@ -55,25 +61,29 @@ export function ChatInput({
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKey}
-          placeholder={isRecording ? "Listening…" : "Ask anything about travel..."}
+          placeholder={getPlaceholder()}
           rows={1}
           disabled={loading}
           className="min-w-0 flex-1 resize-none bg-transparent px-2 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none disabled:opacity-50"
         />
 
-        {/* Mic / STT button */}
+        {/* Mic / STT — red + pulse while recording, amber + spinner while transcribing */}
         <button
           type="button"
-          aria-label={isRecording ? "Stop recording" : "Start voice input"}
+          aria-label={isRecording ? "Stop & transcribe" : "Start voice input"}
           onClick={onToggleRecording}
           disabled={loading}
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm transition sm:h-11 sm:w-11 ${
-            isRecording
+            isRecording && !input
               ? "animate-pulse bg-red-500 text-white"
+              : isRecording && input
+              ? "bg-amber-400 text-white"
               : "bg-white text-slate-700 hover:text-teal-700"
           }`}
         >
-          {isRecording ? (
+          {isRecording && input ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : isRecording ? (
             <MicOff className="h-5 w-5" />
           ) : (
             <Mic className="h-5 w-5" />

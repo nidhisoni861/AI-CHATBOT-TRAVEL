@@ -60,6 +60,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   time: string;
+  detectedLang?: string;  // ISO 639-1 code, e.g. "de", "hi"
   dashboard?: DashboardPayload | null;
   showDashboard?: boolean;
 }
