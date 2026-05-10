@@ -28,7 +28,7 @@ export function ChatInput({
   }
 
   return (
-    <footer className="mt-4 rounded-[22px] border border-white/20 bg-white/15 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:mt-5 sm:p-2">
+    <footer className="mt-4 rounded-[22px] border border-white/15 bg-white/8 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] sm:mt-5 sm:p-2">
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* New chat */}
         <button

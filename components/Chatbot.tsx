@@ -104,7 +104,7 @@ export default function ChatBotPanel() {
   }
 
   return (
-    <section className="flex h-full max-h-[calc(100vh-128px)] min-h-0 w-full max-w-[1220px] flex-col rounded-[28px] border border-white/20 bg-white/10 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.40)] backdrop-blur-2xl sm:rounded-[34px] sm:p-5 lg:p-6">
+    <section className="flex h-full max-h-[calc(100vh-128px)] min-h-0 w-full max-w-[1220px] flex-col rounded-[28px] border border-white/15 bg-white/8 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.20)] sm:rounded-[34px] sm:p-5 lg:p-6">
       <ChatHeader voiceEnabled={voiceEnabled} onToggleVoice={toggleVoice} />
 
       <ChatMessages messages={messages} loading={loading} />

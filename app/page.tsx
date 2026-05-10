@@ -46,7 +46,7 @@ export default function HomePage() {
 
       <section className="relative z-10 flex h-screen w-full flex-col items-center px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex h-[96px] shrink-0 flex-col items-center justify-center text-center sm:h-[110px]">
-          <h1 className="animate-title-reveal bg-gradient-to-r from-white via-yellow-100 to-white bg-clip-text text-4xl font-black tracking-[0.16em] text-transparent drop-shadow-[0_8px_24px_rgba(255,255,255,0.25)] sm:text-5xl lg:text-6xl">
+          <h1 className="animate-blue-wave text-4xl font-black tracking-[0.16em] drop-shadow-[0_8px_24px_rgba(56,189,248,0.40)] sm:text-5xl lg:text-6xl">
             AI Travel Assistant Chatbot
           </h1>
 

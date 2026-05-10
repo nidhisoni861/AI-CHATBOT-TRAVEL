@@ -47,7 +47,7 @@ export function ChatMessages({ messages, loading }: ChatMessagesProps) {
             </div>
             <div className="min-w-0 max-w-[85%] flex-1 sm:max-w-[680px]">
               {!msg.showDashboard && (
-                <div className="rounded-[18px] rounded-tl-md bg-white/20 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-sm sm:px-5 sm:py-4">
+                <div className="rounded-[18px] rounded-tl-md bg-white/10 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.10)] sm:px-5 sm:py-4">
                   <p className="whitespace-pre-line text-sm leading-relaxed text-white">
                     {msg.text}
                   </p>
@@ -76,7 +76,7 @@ export function ChatMessages({ messages, loading }: ChatMessagesProps) {
               className="h-full w-full rounded-full object-cover"
             />
           </div>
-          <div className="rounded-[18px] rounded-tl-md bg-white/20 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-sm">
+          <div className="rounded-[18px] rounded-tl-md bg-white/10 shadow-[0_10px_30px_rgba(15,23,42,0.10)]">
             <TypingIndicator />
           </div>
         </div>
