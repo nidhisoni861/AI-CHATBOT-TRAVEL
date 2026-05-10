@@ -604,6 +604,22 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
         # Multi-service or general request: keep full structure
         return payload
 
+    # Update assistant_message_source based on model variant
+    assistant_message_source = "mock_model"
+    if not MOCK_MODEL:
+        if request.model_variant == "fine_tuned":
+            assistant_message_source = "fine_tuned_model"
+        elif request.model_variant == "base":
+            assistant_message_source = "base_model"
+        else:
+            assistant_message_source = "model_generated"
+    
+    # Update assistant_message_source in dashboard_payload
+    normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
+    
+    # Final intent-based response cleanup
+    normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
+
     return ChatResponse(
         session_id=request.session_id,
         selected_model=request.model_variant,
