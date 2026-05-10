@@ -1062,6 +1062,12 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     logger.info("[FINAL USED API] %s", normalized["dashboard_payload"].get("api_grounding", {}).get("used_api"))
     logger.info("[FINAL INTENT] %s", normalized["dashboard_payload"].get("intent"))
     
+    # Update dashboard actions based on available API data for itinerary_generation
+    if backend_intent == "itinerary_generation":
+        normalized["dashboard_payload"] = update_dashboard_actions_for_available_sections(
+            normalized["dashboard_payload"]
+        )
+    
     # Update assistant_message based on backend intent
     if backend_intent == "weather_query":
         # Extract location from message or use default
@@ -1810,6 +1816,40 @@ def itinerary_has_required_days(payload: dict, duration_days: int) -> bool:
                 pass
 
     return set(range(1, duration_days + 1)).issubset(days)
+
+
+def update_dashboard_actions_for_available_sections(payload: dict) -> dict:
+    """
+    Update dashboard_actions based on available API data sections.
+    Only adds show_flights, show_hotels, show_events when data is available.
+    """
+    if not payload or not isinstance(payload, dict):
+        return payload
+
+    intent = payload.get("intent")
+
+    if intent != "itinerary_generation":
+        return payload
+
+    actions = ["show_trip_summary", "show_itinerary", "show_budget"]
+
+    flights = payload.get("flights") or {}
+    hotels = payload.get("hotels") or {}
+    local_events = payload.get("local_events") or {}
+
+    if isinstance(flights, dict) and flights.get("status") == "available" and flights.get("data"):
+        actions.append("show_flights")
+
+    if isinstance(hotels, dict) and hotels.get("status") == "available" and hotels.get("data"):
+        actions.append("show_hotels")
+
+    if isinstance(local_events, dict) and local_events.get("status") == "available" and local_events.get("data"):
+        actions.append("show_events")
+
+    # Remove duplicates while preserving order
+    payload["dashboard_actions"] = list(dict.fromkeys(actions))
+
+    return payload
 
 
 def normalize_hotels_result(hotel_result):
