@@ -2130,112 +2130,41 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
 async def _build_direct_flight_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
     """Build direct flight response bypassing model"""
     logger.info("[FLIGHT DIRECT RESPONSE]")
-    
+
     selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
     adapter_loaded = selected_model == "fine_tuned"
-    
-    # Initialize budget variables with defaults
-    transport_cost = 0
-    flight_budget_breakdown = {
-        "currency": "EUR",
-        "transport": 0,
-        "food": 0,
-        "activities": 0,
-        "accommodation": 0,
-        "intercity_transport": 0,
-        "total_known_cost": 0,
-        "total": 0,
-        "remaining_budget": 500,
-        "remaining_budget_before_transport_and_accommodation": 500,
-        "within_budget": True,
-        "note": "Budget is estimated from available flight data.",
-        "source": "backend_budget_calculation"
-    }
-    
-    # Get travel_info from enriched context at function scope
-    travel_info = enriched_api_context.get("travel_info", {})
-    
-    # Extract route from message first (highest priority)
+    travel_info = enriched_api_context.get("travel_info", {}) or {}
+
     message_lower = request.message.lower()
     origin_raw = None
     destination_raw = None
-    
+
     logger.info("[FLIGHT RAW MESSAGE] %s", request.message)
     logger.info("[FLIGHT TRAVEL INFO] %s", travel_info)
-    
-    # Extract route from message using regex patterns
-    from_match = re.search(r'from\s+(\w+)', message_lower)
-    to_match = re.search(r'\bto\s+(munich|stuttgart|berlin|münchen|heidelberg)\b', message_lower)
-    
+
+    from_match = re.search(r"from\s+([a-zA-ZäöüÄÖÜß]+)", message_lower)
+    to_match = re.search(r"\bto\s+([a-zA-ZäöüÄÖÜß]+)", message_lower)
+
     if from_match:
-        origin_raw = from_match.group(1)
+        origin_raw = from_match.group(1).strip()
+
     if to_match:
-        destination_raw = to_match.group(1)
-    
-    # Fallback: check for cities without explicit from/to
-    if not origin_raw and not destination_raw:
-        for city_alias in CITY_ALIASES.keys():
-            if city_alias in message_lower:
-                if not origin_raw:
-                    origin_raw = city_alias
-                elif not destination_raw:
-                    destination_raw = city_alias
-                break
-    
-    # Apply city normalization
-    origin = None
-    destination = None
-    if origin_raw:
-        origin = CITY_ALIASES.get(origin_raw, origin_raw.title())
-    if destination_raw:
-        destination = CITY_ALIASES.get(destination_raw, destination_raw.title())
-    
-    # Fallback to enriched context only if message extraction fails
-    if not origin or not destination:
-        origin = origin or travel_info.get("origin")
-        destination = destination or travel_info.get("destination")
-    
-    logger.info("[FLIGHT ROUTE REGEX MATCH] origin_raw=%s destination_raw=%s", origin_raw, destination_raw)
+        destination_raw = to_match.group(1).strip()
+
+    origin = CITY_ALIASES.get(origin_raw, origin_raw.title()) if origin_raw else None
+    destination = CITY_ALIASES.get(destination_raw, destination_raw.title()) if destination_raw else None
+
+    origin = origin or travel_info.get("origin")
+    destination = destination or travel_info.get("destination")
+
     logger.info("[FLIGHT EXTRACTED ORIGIN] %s", origin)
     logger.info("[FLIGHT EXTRACTED DESTINATION] %s", destination)
-    
-    logger.info("[FLIGHT SEARCH ORIGIN] %s", origin)
-    logger.info("[FLIGHT SEARCH DESTINATION] %s", destination)
-    
-    # Call flight service directly for live data
-    from add_backend.app.services.flight_service import FlightService
-    flight_service = FlightService()
-    
-    # Add date fallbacks with normalization
-    departure_date = normalize_flight_date(travel_info.get("departure_date"), "14/10/2026")
-    return_date = normalize_flight_date(travel_info.get("return_date"), "17/10/2026")
-    
-    logger.info("[CHAT FLIGHT DEPARTURE DATE] %s", departure_date)
-    logger.info("[CHAT FLIGHT RETURN DATE] %s", return_date)
-    
-    # Call flight service
-    try:
-        flight_result = await flight_service.search_flights(
-            origin=origin,
-            destination=destination,
-            departure_date=departure_date,
-            return_date=return_date
-        )
-        logger.info("[CHAT FLIGHT RAW SERVICE RESULT] %s", flight_result)
-        flights_list = normalize_flights_result(flight_result)
-        logger.info("[CHAT FLIGHT NORMALIZED LIST] %s", flights_list)
-    except Exception as e:
-        logger.error("[CHAT FLIGHT SERVICE ERROR] %s", str(e))
-        flight_result = None
-        flights_list = []
-    
+
     response_kwargs = {}
     if request.include_raw_model_output:
         response_kwargs["raw_model_output"] = "Direct flight validation response"
-    
-    # If destination is missing, return validation response
-    if not destination:
-        logger.info("[FLIGHT VALIDATION] destination missing")
+
+    if not destination or destination in ["Unknown", "unknown", None, ""]:
         return ChatResponse(
             session_id=request.session_id,
             selected_model=selected_model,
@@ -2267,10 +2196,11 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
                     "intercity_transport": 0,
                     "total_known_cost": 0,
                     "total": 0,
-                    "remaining_budget": 0,
+                    "remaining_budget": 500,
+                    "remaining_budget_before_transport_and_accommodation": 500,
                     "within_budget": True,
-                    "note": None,
-                    "source": "empty_budget"
+                    "note": "Budget is estimated from available flight data.",
+                    "source": "backend_budget_calculation"
                 },
                 "dashboard_actions": ["show_flights"],
                 "api_grounding": {
@@ -2281,33 +2211,50 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             },
             **response_kwargs,
         )
-    
-    # Build response with live flight data and static fallback
+
+    if not origin:
+        origin = "Berlin"
+
+    departure_date = normalize_flight_date(travel_info.get("departure_date"), "11/05/2026")
+    return_date = normalize_flight_date(travel_info.get("return_date"), "12/05/2026")
+
+    flights_list = []
+
+    try:
+        from add_backend.app.services.flight_service import FlightService
+        flight_service = FlightService()
+
+        flight_result = await flight_service.search_flights(
+            origin=origin,
+            destination=destination,
+            departure_date=departure_date,
+            return_date=return_date
+        )
+
+        logger.info("[CHAT FLIGHT RAW SERVICE RESULT] %s", flight_result)
+        flights_list = normalize_flights_result(flight_result)
+        logger.info("[CHAT FLIGHT NORMALIZED LIST] %s", flights_list)
+
+    except Exception as exc:
+        logger.error("[CHAT FLIGHT SERVICE ERROR] %s", str(exc))
+        flights_list = []
+
     if flights_list:
-        # Live flights available
         flights_status = "available"
         flights_source = "live_api"
         used_apis = ["flights"]
         missing_apis = []
         warnings = []
         assistant_message = f"Here are available flight options from {origin} to {destination}."
-        raw_output = "Direct flight response: live flight data available"
     else:
-        # No live flights, create static fallback
-        fallback_flights = build_static_fallback_flights(origin, destination, departure_date, return_date)
+        flights_list = build_static_fallback_flights(origin, destination, departure_date, return_date)
         flights_status = "available"
         flights_source = "static_fallback"
         used_apis = []
         missing_apis = ["flights"]
         warnings = ["Live flight API unavailable; showing static fallback flight options."]
-        assistant_message = f"Live flight data is currently unavailable, but here are sample flight options from {origin} to {destination}."
-        raw_output = "Direct flight response: static fallback flights shown because live API returned no data"
-        flights_list = fallback_flights
-    
-    if request.include_raw_model_output:
-        response_kwargs["raw_model_output"] = f"Direct flight response: live API budget transport={transport_cost}"
-    
-    # Build payload first, then calculate budget
+        assistant_message = f"Here are available flight options from {origin} to {destination}."
+
     payload = {
         "schema_version": "travel_dashboard_v1",
         "intent": "flight_search",
@@ -2333,9 +2280,8 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             "warnings": warnings
         }
     }
-    
-    flight_prices = []
 
+    flight_prices = []
     for flight in payload.get("flights", {}).get("data", []):
         if isinstance(flight, dict):
             price_text = str(flight.get("price", ""))
@@ -2345,26 +2291,28 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
 
     transport_cost = min(flight_prices) if flight_prices else 0
 
-payload["budget_breakdown"] = {
-    "currency": "EUR",
-    "transport": transport_cost,
-    "food": 0,
-    "activities": 0,
-    "accommodation": 0,
-    "intercity_transport": transport_cost,
-    "total_known_cost": transport_cost,
-    "total": transport_cost,
-    "remaining_budget": 500 - transport_cost,
-    "remaining_budget_before_transport_and_accommodation": 500,
-    "within_budget": (500 - transport_cost) >= 0,
-    "note": "Budget is estimated from available flight data.",
-    "source": "backend_budget_calculation"
-}
+    payload["budget_breakdown"] = {
+        "currency": "EUR",
+        "transport": transport_cost,
+        "food": 0,
+        "activities": 0,
+        "accommodation": 0,
+        "intercity_transport": transport_cost,
+        "total_known_cost": transport_cost,
+        "total": transport_cost,
+        "remaining_budget": 500 - transport_cost,
+        "remaining_budget_before_transport_and_accommodation": 500,
+        "within_budget": (500 - transport_cost) >= 0,
+        "note": "Budget is estimated from available flight data.",
+        "source": "backend_budget_calculation"
+    }
 
-    logger.info("[LIVE FLIGHT PAYLOAD DATA] %s", payload.get("flights", {}).get("data", []))
     logger.info("[LIVE FLIGHT PRICE STRINGS] %s", [f.get("price") for f in payload.get("flights", {}).get("data", []) if isinstance(f, dict)])
     logger.info("[LIVE FLIGHT PRICE_NUMBERS] %s", flight_prices)
     logger.info("[LIVE FLIGHT TRANSPORT_COST] %s", transport_cost)
+
+    if request.include_raw_model_output:
+        response_kwargs["raw_model_output"] = f"Direct flight response: live API budget transport={transport_cost}"
 
     return ChatResponse(
         session_id=request.session_id,
@@ -2377,7 +2325,6 @@ payload["budget_breakdown"] = {
         dashboard_payload=payload,
         **response_kwargs,
     )
-
 
 def _build_flight_validation_response(request: ChatRequest, origin: str, destination: str) -> ChatResponse:
     """Build flight validation response when destination is missing"""
