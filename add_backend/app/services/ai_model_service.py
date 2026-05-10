@@ -158,24 +158,27 @@ def build_static_fallback_flights(origin: str, destination: str, departure_date:
             "destination": destination,
             "departure_date": departure_date,
             "return_date": return_date,
-            "departure_time": "08:00",
-            "arrival_time": "09:30",
+            "price": "$250-350",
             "airline": "Emirates Airline",
-            "flight_number": "EK-2026",
-            "price": f"${150 + hash(origin + destination) % 200}",
-            "source": "static_fallback"
+            "flight_number": "EK-2026"
         },
         {
             "origin": origin,
             "destination": destination,
             "departure_date": departure_date,
             "return_date": return_date,
-            "departure_time": "14:00",
-            "arrival_time": "15:30",
-            "airline": "Emirates Airline",
-            "flight_number": "EK-2027",
-            "price": f"${120 + hash(destination + origin) % 180}",
-            "source": "static_fallback"
+            "price": "$180-260",
+            "airline": "Lufthansa",
+            "flight_number": "LH-2031"
+        },
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "price": "$120-200",
+            "airline": "Eurowings",
+            "flight_number": "EW-4512"
         }
     ]
 
@@ -401,11 +404,29 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                         {
                             "origin": "Berlin",
                             "destination": "Munich",
-                            "departure_time": "09:30",
-                            "arrival_time": "10:45",
+                            "departure_date": "11/05/2026",
+                            "return_date": "12/05/2026",
+                            "price": "$250-350",
                             "airline": "Emirates Airline",
-                            "flight_number": "EK-2026",
-                            "price": 89.99
+                            "flight_number": "EK-2026"
+                        },
+                        {
+                            "origin": "Berlin",
+                            "destination": "Munich",
+                            "departure_date": "11/05/2026",
+                            "return_date": "12/05/2026",
+                            "price": "$180-260",
+                            "airline": "Lufthansa",
+                            "flight_number": "LH-2031"
+                        },
+                        {
+                            "origin": "Berlin",
+                            "destination": "Munich",
+                            "departure_date": "11/05/2026",
+                            "return_date": "12/05/2026",
+                            "price": "$120-200",
+                            "airline": "Eurowings",
+                            "flight_number": "EW-4512"
                         }
                     ],
                     "source": "mock_api",
@@ -1436,26 +1457,27 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
             "destination": destination,
             "departure_date": departure_date,
             "return_date": return_date,
-            "price": "€120-€180",
+            "price": "$250-350",
             "airline": "Emirates Airline",
-            "flight_number": "EK-2026",
-            "departure_time": "Morning",
-            "arrival_time": "Same day",
-            "duration": "Approx. 1h 10m",
-            "source": "static_fallback"
+            "flight_number": "EK-2026"
         },
         {
             "origin": origin,
             "destination": destination,
             "departure_date": departure_date,
             "return_date": return_date,
-            "price": "€150-€220",
-            "airline": "Emirates Airline",
-            "flight_number": "EK-2027",
-            "departure_time": "Afternoon",
-            "arrival_time": "Same day",
-            "duration": "Approx. 1h 15m",
-            "source": "static_fallback"
+            "price": "$180-260",
+            "airline": "Lufthansa",
+            "flight_number": "LH-2031"
+        },
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "price": "$120-200",
+            "airline": "Eurowings",
+            "flight_number": "EW-4512"
         }
     ]
 

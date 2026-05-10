@@ -54,6 +54,24 @@ class FlightService:
                 price="$250-350",
                 airline="Emirates Airline",
                 flight_number="EK-2026"
+            ),
+            FlightInfo(
+                origin=origin,
+                destination=destination,
+                departure_date=departure_date,
+                return_date=return_date,
+                price="$180-260",
+                airline="Lufthansa",
+                flight_number="LH-2031"
+            ),
+            FlightInfo(
+                origin=origin,
+                destination=destination,
+                departure_date=departure_date,
+                return_date=return_date,
+                price="$120-200",
+                airline="Eurowings",
+                flight_number="EW-4512"
             )
         ]
         

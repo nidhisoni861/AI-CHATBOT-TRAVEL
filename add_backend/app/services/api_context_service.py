@@ -349,24 +349,27 @@ class ApiContextService:
                         "destination": travel_info["destination"],
                         "departure_date": departure_date,
                         "return_date": return_date,
-                        "departure_time": "08:00",
-                        "arrival_time": "09:30",
+                        "price": "$250-350",
                         "airline": "Emirates Airline",
-                        "flight_number": "EK-2026",
-                        "price": f"${150 + hash(travel_info['origin'] + travel_info['destination']) % 200}",
-                        "source": "static_fallback"
+                        "flight_number": "EK-2026"
                     },
                     {
                         "origin": travel_info["origin"],
                         "destination": travel_info["destination"],
                         "departure_date": departure_date,
                         "return_date": return_date,
-                        "departure_time": "14:00",
-                        "arrival_time": "15:30",
-                        "airline": "Emirates Airline",
-                        "flight_number": "EK-2027",
-                        "price": f"${120 + hash(travel_info['destination'] + travel_info['origin']) % 180}",
-                        "source": "static_fallback"
+                        "price": "$180-260",
+                        "airline": "Lufthansa",
+                        "flight_number": "LH-2031"
+                    },
+                    {
+                        "origin": travel_info["origin"],
+                        "destination": travel_info["destination"],
+                        "departure_date": departure_date,
+                        "return_date": return_date,
+                        "price": "$120-200",
+                        "airline": "Eurowings",
+                        "flight_number": "EW-4512"
                     }
                 ]
                 enriched_context["flights"] = fallback_flights
