@@ -2316,12 +2316,49 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         }
     }
     
-    # Calculate budget breakdown for flight search
-    payload["budget_breakdown"] = calculate_budget_breakdown(payload)
-    
-    # Add temporary log for verification
-    logger.info("[FLIGHT BUDGET INPUT FLIGHTS] %s", flights_list)
-    logger.info("[FLIGHT BUDGET OUTPUT] %s", payload["budget_breakdown"])
+    # Direct flight budget calculation
+    def _flight_price_to_number(value):
+        if value is None:
+            return 0
+        if isinstance(value, (int, float)):
+            return int(value)
+        if not isinstance(value, str):
+            return 0
+        numbers = re.findall(r"\d+", value)
+        if not numbers:
+            return 0
+        return int(numbers[0])
+
+    flight_prices = []
+    for f in flights_list:
+        if isinstance(f, dict):
+            price_num = _flight_price_to_number(f.get("price"))
+            if price_num > 0:
+                flight_prices.append(price_num)
+
+    transport_cost = min(flight_prices) if flight_prices else 0
+
+    flight_budget_breakdown = {
+        "currency": "EUR",
+        "transport": transport_cost,
+        "food": 0,
+        "activities": 0,
+        "accommodation": 0,
+        "intercity_transport": transport_cost,
+        "total_known_cost": transport_cost,
+        "total": transport_cost,
+        "remaining_budget": 500 - transport_cost,
+        "remaining_budget_before_transport_and_accommodation": 500,
+        "within_budget": (500 - transport_cost) >= 0,
+        "note": "Budget is estimated from available flight data.",
+        "source": "backend_budget_calculation"
+    }
+
+    logger.info("[DIRECT FLIGHT PRICE VALUES] %s", [f.get("price") for f in flights_list if isinstance(f, dict)])
+    logger.info("[DIRECT FLIGHT PRICE NUMBERS] %s", flight_prices)
+    logger.info("[DIRECT FLIGHT BUDGET] %s", flight_budget_breakdown)
+
+    payload["budget_breakdown"] = flight_budget_breakdown
     
     return ChatResponse(
         session_id=request.session_id,
