@@ -490,18 +490,10 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         logger.info("[WEATHER DIRECT RESPONSE] Bypassing model for weather query")
         return await _build_direct_weather_response(request, enriched_api_context)
     
-    # Flight validation for missing destination
+    # Direct flight response handling - bypass model entirely
     if backend_intent == "flight_search":
-        travel_info = enriched_api_context.get("travel_info", {})
-        origin = travel_info.get("origin")
-        destination = travel_info.get("destination")
-        
-        logger.info("[FLIGHT SEARCH ORIGIN] %s", origin)
-        logger.info("[FLIGHT SEARCH DESTINATION] %s", destination)
-        
-        if not destination:
-            logger.info("[FLIGHT VALIDATION] destination missing")
-            return _build_flight_validation_response(request, origin, destination)
+        logger.info("[FLIGHT DIRECT RESPONSE] Bypassing model for flight search")
+        return await _build_direct_flight_response(request, enriched_api_context)
     
     # Use mock mode if enabled
     if MOCK_MODEL:
@@ -1192,6 +1184,166 @@ def normalize_model_dashboard_payload(payload: dict, backend_intent: str, api_co
     logger.info("[MODEL NORMALIZATION VALIDATED]")
     
     return payload
+
+
+# City alias map for typo correction
+CITY_ALIASES = {
+    "sttugart": "Stuttgart",
+    "stuttgart": "Stuttgart",
+    "berlin": "Berlin",
+    "munich": "Munich",
+    "münchen": "Munich",
+    "heidelberg": "Heidelberg"
+}
+
+
+async def _build_direct_flight_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
+    """Build direct flight response bypassing model"""
+    logger.info("[FLIGHT DIRECT RESPONSE]")
+    
+    selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
+    adapter_loaded = selected_model == "fine_tuned"
+    
+    # Extract origin and destination from enriched context
+    travel_info = enriched_api_context.get("travel_info", {})
+    origin = travel_info.get("origin")
+    destination = travel_info.get("destination")
+    
+    # Apply city normalization from message if needed
+    message_lower = request.message.lower()
+    
+    # Extract cities from message for normalization
+    for city_alias, normalized_city in CITY_ALIASES.items():
+        if city_alias in message_lower:
+            if not origin and "from" in message_lower:
+                # Check if this city appears after "from"
+                from_match = re.search(r'from\s+\w+', message_lower)
+                if from_match and city_alias in from_match.group():
+                    origin = normalized_city
+            if not destination and "to" in message_lower:
+                # Check if this city appears after "to"
+                to_match = re.search(r'to\s+\w+', message_lower)
+                if to_match and city_alias in to_match.group():
+                    destination = normalized_city
+            # If no from/to pattern, assume first mentioned is origin
+            elif not origin and city_alias in message_lower:
+                origin = normalized_city
+    
+    logger.info("[FLIGHT SEARCH ORIGIN] %s", origin)
+    logger.info("[FLIGHT SEARCH DESTINATION] %s", destination)
+    
+    # Extract flight data from enriched context
+    flights_data = None
+    if "flights" in enriched_api_context:
+        flights_data = enriched_api_context["flights"]
+    elif "flight_data" in enriched_api_context:
+        flights_data = enriched_api_context["flight_data"]
+    elif "dashboard_payload" in enriched_api_context:
+        dashboard = enriched_api_context["dashboard_payload"]
+        if "flights" in dashboard:
+            flights_section = dashboard["flights"]
+            if isinstance(flights_section, dict) and "data" in flights_section:
+                flights_data = flights_section["data"]
+            else:
+                flights_data = flights_section
+    
+    logger.info("[FLIGHT DATA] %s", flights_data)
+    
+    response_kwargs = {}
+    if request.include_raw_model_output:
+        response_kwargs["raw_model_output"] = "Direct flight validation response"
+    
+    # If destination is missing, return validation response
+    if not destination:
+        logger.info("[FLIGHT VALIDATION] destination missing")
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=selected_model,
+            adapter_loaded=adapter_loaded,
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Please provide destination city for your flight search.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "flight_search",
+                "trip_summary": {
+                    "origin": origin,
+                    "destination": None,
+                    "source": "backend_extraction"
+                },
+                "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_flights"],
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": ["flights"],
+                    "warnings": ["Destination is missing. Please provide destination city."]
+                }
+            },
+            **response_kwargs,
+        )
+    
+    # Build response with flight data
+    flights_list = flights_data if isinstance(flights_data, list) else []
+    flights_status = "available" if flights_list else "unavailable"
+    used_apis = ["flights"] if flights_list else []
+    missing_apis = [] if flights_list else ["flights"]
+    warnings = [] if flights_list else ["No flights found or flight API unavailable."]
+    
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=selected_model,
+        adapter_loaded=adapter_loaded,
+        parse_success=True,
+        fallback_used=False,
+        retry_used=False,
+        assistant_message=f"Here are available flight options from {origin} to {destination}.",
+        dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
+            "intent": "flight_search",
+            "trip_summary": {
+                "origin": origin,
+                "destination": destination,
+                "source": "backend_extraction"
+            },
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {
+                "data": flights_list,
+                "source": "live_api",
+                "status": flights_status
+            },
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_flights"],
+            "api_grounding": {
+                "used_api": used_apis,
+                "missing_api": missing_apis,
+                "warnings": warnings
+            }
+        },
+        **response_kwargs,
+    )
 
 
 def _build_flight_validation_response(request: ChatRequest, origin: str, destination: str) -> ChatResponse:
