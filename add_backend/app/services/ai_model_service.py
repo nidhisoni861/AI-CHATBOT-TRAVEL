@@ -1045,31 +1045,84 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     )
 
 def safe_json_loads_from_model(raw_text: str):
-    """Safely parse JSON from model output, preserving raw text for debugging"""
+    """
+    Safely parse JSON from model output.
+    Repairs:
+    - markdown fences
+    - text before JSON
+    - trailing accidental quotes
+    - trailing commas
+    - missing closing braces/brackets
+    """
     if not raw_text or not str(raw_text).strip():
         raise ValueError("empty_model_output")
 
     text = str(raw_text).strip()
 
-    # remove markdown fences
     text = text.replace("```json", "").replace("```", "").strip()
 
-    # If output has text before JSON, trim to first {
     first = text.find("{")
-    last = text.rfind("}")
-    if first == -1 or last == -1 or last <= first:
+    if first == -1:
         raise ValueError("no_json_object_found")
 
-    text = text[first:last + 1]
+    text = text[first:].strip()
 
-    # repair common trailing commas
+    while len(text) > 1 and text.endswith('"') and text[-2] in ("}", "]"):
+        text = text[:-1].strip()
+
     text = text.replace(",}", "}").replace(",]", "]")
 
-    try:
-        return json.loads(text)
-    except Exception as exc:
-        raise ValueError(f"json_parse_failed: {str(exc)}")
+    def try_load(candidate: str):
+        parsed = json.loads(candidate)
+        if isinstance(parsed, str):
+            parsed = json.loads(parsed)
+        return parsed
 
+    try:
+        return try_load(text)
+    except Exception:
+        pass
+
+    stack = []
+    in_string = False
+    escape = False
+
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+
+        if ch == "\\":
+            escape = True
+            continue
+
+        if ch == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in ("}", "]"):
+            if stack and stack[-1] == ch:
+                stack.pop()
+
+    repaired = text + "".join(reversed(stack))
+    repaired = repaired.replace(",}", "}").replace(",]", "]")
+
+    logger.info("[SAFE JSON REPAIRED TEXT] %s", repaired)
+
+    try:
+        return try_load(repaired)
+    except Exception as exc:
+        logger.error("[SAFE JSON REPAIR FAILED] %s", str(exc))
+        logger.error("[SAFE JSON ORIGINAL TEXT] %s", text)
+        logger.error("[SAFE JSON REPAIRED TEXT FAILED] %s", repaired)
+        raise ValueError(f"json_parse_failed: {str(exc)}")
 
 def parse_model_json_with_repair(raw_text: str) -> dict:
     """Parse model JSON with robust repair logic"""
