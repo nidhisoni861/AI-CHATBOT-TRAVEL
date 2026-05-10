@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,8 @@ from add_backend.app.services.flight_service import FlightService
 from add_backend.app.services.hotel_service import HotelService
 from add_backend.app.services.events_service import EventsService
 
+logger = logging.getLogger(__name__)
+
 
 class ApiContextService:
     """Service to build and enrich API context from user messages"""
@@ -24,6 +27,26 @@ class ApiContextService:
         self._flight_service = None
         self._hotel_service = None
         self._events_service = None
+        
+        # City alias map for typo correction
+        self.city_aliases = {
+            "sttugart": "Stuttgart",
+            "stuttgart": "Stuttgart",
+            "berlin": "Berlin",
+            "munich": "Munich",
+            "münchen": "Munich",
+            "heidelberg": "Heidelberg"
+        }
+
+    def normalize_city(self, city: str) -> str:
+        """Normalize city name to proper format with typo correction"""
+        if not city:
+            return city
+        
+        city = city.strip().lower()
+        
+        # Use city alias map for typo correction
+        return self.city_aliases.get(city, city.title())
 
     @property
     def weather_service(self):
@@ -67,7 +90,8 @@ class ApiContextService:
             if city in message_lower:
                 # Find position to maintain order
                 start_pos = message_lower.find(city)
-                found_cities.append((start_pos, city.title()))
+                normalized_city = self.normalize_city(city)
+                found_cities.append((start_pos, normalized_city))
         
         # Sort by position in message
         found_cities.sort(key=lambda x: x[0])
@@ -118,8 +142,8 @@ class ApiContextService:
             to_match = re.search(r'to\s+(\w+)', message_lower)
             
             if from_match and to_match:
-                from_city = from_match.group(1).title()
-                to_city = to_match.group(1).title()
+                from_city = self.normalize_city(from_match.group(1))
+                to_city = self.normalize_city(to_match.group(1))
                 
                 # Find matching cities in our list
                 origin = next((city for city in cities_mentioned if from_city in city), cities_mentioned[0])
@@ -288,22 +312,28 @@ class ApiContextService:
         
         # Flights: only fetch for explicit flight request (not automatic for itinerary)
         if intent.get("flights", False):
-            try:
-                flights = await self.flight_service.search_flights(
-                    travel_info["origin"],
-                    travel_info["destination"],
-                    travel_info["departure_date"],
-                    travel_info["return_date"]
-                )
-                if flights:
-                    enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
-                    enriched_context["used_apis"].append("flights")
-                else:
-                    enriched_context["warnings"].append("No flights found or API unavailable")
-                    enriched_context["missing_apis"].append("flights")
-            except Exception as e:
-                enriched_context["warnings"].append(f"Flight service error: {str(e)}")
+            # Check if destination is missing
+            if not travel_info.get("destination"):
+                enriched_context["warnings"].append("Destination is missing. Please provide destination city.")
                 enriched_context["missing_apis"].append("flights")
+            else:
+                try:
+                    flights = await self.flight_service.search_flights(
+                        travel_info["origin"],
+                        travel_info["destination"],
+                        travel_info["departure_date"],
+                        travel_info["return_date"]
+                    )
+                    if flights:
+                        enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
+                        enriched_context["used_apis"].append("flights")
+                        logger.info("[FLIGHT DATA] %s flights found", len(flights))
+                    else:
+                        enriched_context["warnings"].append("No flights found or API unavailable")
+                        enriched_context["missing_apis"].append("flights")
+                except Exception as e:
+                    enriched_context["warnings"].append(f"Flight service error: {str(e)}")
+                    enriched_context["missing_apis"].append("flights")
         
         # Hotels: fetch for itinerary or explicit hotel request
         if is_itinerary or intent.get("hotels", False):
