@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { ChatHeader } from "./chatbot/ChatHeader";
 import { ChatInput } from "./chatbot/ChatInput";
 import { ChatMessages } from "./chatbot/ChatMessages";
@@ -33,6 +33,12 @@ export default function ChatBotPanel() {
 
   const { voiceEnabled, isRecording, speak, toggleVoice, toggleRecording } =
     useVoice();
+
+  // Speak welcome on every page load / reload
+  useEffect(() => {
+    speak("Welcome to AI Travel Assistant. What can I help you with today?");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function newChat() {
     if (loading) return;

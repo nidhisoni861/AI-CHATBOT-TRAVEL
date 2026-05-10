@@ -3,10 +3,10 @@
 import { useRef, useState, useCallback } from "react";
 
 export function useVoice() {
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   // ref keeps voiceEnabled accessible inside stable callbacks without stale closures
-  const voiceEnabledRef = useRef(false);
+  const voiceEnabledRef = useRef(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
