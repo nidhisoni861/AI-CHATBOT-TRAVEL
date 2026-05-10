@@ -1036,6 +1036,14 @@ def normalize_model_dashboard_payload(payload: dict, backend_intent: str, api_co
             }
     
     # Normalize flights section
+    # Preserve flights with source information
+    if api_context.get("flights"):
+        flight_source = api_context.get("flight_source", "live_api")
+        payload["flights"] = {
+            "data": api_context["flights"],
+            "source": flight_source,
+            "status": "available"
+        }
     flights_data = extract_live_section(api_context, "flights")
     if flights_data:
         payload["flights"] = {
@@ -1159,7 +1167,10 @@ def normalize_model_dashboard_payload(payload: dict, backend_intent: str, api_co
     elif backend_intent == "events_search":
         payload["dashboard_actions"] = ["show_events"]
     elif backend_intent == "itinerary_generation":
-        payload["dashboard_actions"] = ["show_trip_summary", "show_itinerary", "show_budget"]
+        dashboard_actions = ["show_trip_summary", "show_itinerary", "show_budget"]
+        if payload.get("flights", {}).get("status") == "available":
+            dashboard_actions.append("show_flights")
+        payload["dashboard_actions"] = dashboard_actions
     else:
         payload["dashboard_actions"] = []
     
@@ -1213,6 +1224,51 @@ def normalize_flights_result(flight_result):
             return [data]
     
     return []
+
+
+def normalize_flight_date(date_value: str | None, fallback: str) -> str:
+    """Normalize flight date from ISO format to dd/mm/yyyy"""
+    if not date_value:
+        return fallback
+    
+    # yyyy-mm-dd -> dd/mm/yyyy
+    if isinstance(date_value, str) and "-" in date_value:
+        parts = date_value.split("-")
+        if len(parts) == 3:
+            yyyy, mm, dd = parts
+            return f"{dd}/{mm}/{yyyy}"
+    
+    return date_value
+
+
+def build_static_fallback_flights(origin, destination, departure_date, return_date):
+    """Build static fallback flight options when live API returns no data"""
+    return [
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "price": "€120-€180",
+            "airline": "Lufthansa / Eurowings",
+            "departure_time": "Morning",
+            "arrival_time": "Same day",
+            "duration": "Approx. 1h 10m",
+            "source": "static_fallback"
+        },
+        {
+            "origin": origin,
+            "destination": destination,
+            "departure_date": departure_date,
+            "return_date": return_date,
+            "price": "€150-€220",
+            "airline": "Multiple airlines",
+            "departure_time": "Afternoon",
+            "arrival_time": "Same day",
+            "duration": "Approx. 1h 15m",
+            "source": "static_fallback"
+        }
+    ]
 
 
 async def _build_direct_flight_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
@@ -1276,9 +1332,9 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     from add_backend.app.services.flight_service import FlightService
     flight_service = FlightService()
     
-    # Add date fallbacks
-    departure_date = travel_info.get("departure_date") or "14/10/2026"
-    return_date = travel_info.get("return_date") or "17/10/2026"
+    # Add date fallbacks with normalization
+    departure_date = normalize_flight_date(travel_info.get("departure_date"), "14/10/2026")
+    return_date = normalize_flight_date(travel_info.get("return_date"), "17/10/2026")
     
     logger.info("[CHAT FLIGHT DEPARTURE DATE] %s", departure_date)
     logger.info("[CHAT FLIGHT RETURN DATE] %s", return_date)
@@ -1345,14 +1401,30 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             **response_kwargs,
         )
     
-    # Build response with live flight data
-    flights_status = "available" if flights_list else "unavailable"
-    used_apis = ["flights"] if flights_list else []
-    missing_apis = [] if flights_list else ["flights"]
-    warnings = [] if flights_list else ["No flights found or flight API unavailable."]
+    # Build response with live flight data and static fallback
+    if flights_list:
+        # Live flights available
+        flights_status = "available"
+        flights_source = "live_api"
+        used_apis = ["flights"]
+        missing_apis = []
+        warnings = []
+        assistant_message = f"Here are available flight options from {origin} to {destination}."
+        raw_output = "Direct flight response: live flight data available"
+    else:
+        # No live flights, create static fallback
+        fallback_flights = build_static_fallback_flights(origin, destination, departure_date, return_date)
+        flights_status = "available"
+        flights_source = "static_fallback"
+        used_apis = []
+        missing_apis = ["flights"]
+        warnings = ["Live flight API unavailable; showing static fallback flight options."]
+        assistant_message = f"Live flight data is currently unavailable, but here are sample flight options from {origin} to {destination}."
+        raw_output = "Direct flight response: static fallback flights shown because live API returned no data"
+        flights_list = fallback_flights
     
     if request.include_raw_model_output:
-        response_kwargs["raw_model_output"] = "Direct flight response: live flight data available" if flights_list else "Direct flight response: no flights found"
+        response_kwargs["raw_model_output"] = raw_output
     
     return ChatResponse(
         session_id=request.session_id,
@@ -1361,7 +1433,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         parse_success=True,
         fallback_used=False,
         retry_used=False,
-        assistant_message=f"Here are available flight options from {origin} to {destination}." if flights_list else f"No flights found from {origin} to {destination}.",
+        assistant_message=assistant_message,
         dashboard_payload={
             "schema_version": "travel_dashboard_v1",
             "intent": "flight_search",
@@ -1373,7 +1445,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             "weather": {"data": None, "source": "live_api", "status": "unavailable"},
             "flights": {
                 "data": flights_list,
-                "source": "live_api",
+                "source": flights_source,
                 "status": flights_status
             },
             "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
