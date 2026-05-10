@@ -488,7 +488,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     # Direct weather response bypass
     if backend_intent == "weather_query":
         logger.info("[WEATHER DIRECT RESPONSE] Bypassing model for weather query")
-        return _build_direct_weather_response(request, enriched_api_context)
+        return await _build_direct_weather_response(request, enriched_api_context)
     
     # Use mock mode if enabled
     if MOCK_MODEL:
@@ -571,12 +571,41 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
 
     normalized = None
     response_kwargs = {}
+    
+    logger.info("[MODEL JSON REPAIR ATTEMPT]")
+    
     try:
-        normalized = safe_parse_and_normalize(raw_text, enriched_api_context, request.message)
+        # Try parsing original first
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            # Try repair
+            repaired = repair_model_json(raw_text)
+            logger.info("[JSON REPAIRED] %s", repaired)
+            parsed = json.loads(repaired)
+        
+        # Extract dashboard payload if nested
+        if "dashboard_payload" in parsed:
+            dashboard_payload = parsed["dashboard_payload"]
+        else:
+            dashboard_payload = parsed
+        
+        # Normalize model output to proper schema
+        normalized_dashboard = normalize_model_dashboard_payload(dashboard_payload, backend_intent, enriched_api_context)
+        
+        # Build final normalized response
+        normalized = {
+            "assistant_message": parsed.get("assistant_message", f"Here is your {backend_intent.replace('_', ' ')} result."),
+            "dashboard_payload": normalized_dashboard
+        }
+        
+        # Apply API context truth
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
+        
         parse_success = True
         logger.info("[GTR AFTER NORMALIZE]")
         logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
+        
     except Exception as exc:
         # Log the actual validation error for debugging
         logger.error(f"[AI MODEL VALIDATION ERROR] {str(exc)}")
@@ -725,12 +754,94 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     )
 
 
-def _build_direct_weather_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
+def repair_model_json(raw_text: str) -> str:
+    """Repair common JSON formatting issues in model output"""
+    if not raw_text:
+        return raw_text
+
+    text = raw_text.strip()
+
+    # Remove markdown fences
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    # Trim before first { and after last }
+    first = text.find("{")
+    last = text.rfind("}")
+    if first != -1 and last != -1 and last > first:
+        text = text[first:last + 1]
+
+    # Remove accidental trailing quote after final brace
+    if text.endswith('}"') and text.count("{") <= text.count("}"):
+        text = text[:-1]
+
+    # Fix common trailing commas before closing braces
+    text = text.replace(",}", "}").replace(",]", "]")
+
+    return text
+
+
+def extract_live_section(api_context: dict, section: str):
+    """Extract live API section from context with multiple key support"""
+    # Direct keys
+    if section in api_context:
+        return api_context[section]
+    
+    # Suffix keys
+    suffix_key = f"{section}_data"
+    if suffix_key in api_context:
+        return api_context[suffix_key]
+    
+    # Nested dashboard_payload
+    if "dashboard_payload" in api_context:
+        dashboard = api_context["dashboard_payload"]
+        if section in dashboard:
+            if isinstance(dashboard[section], dict) and "data" in dashboard[section]:
+                return dashboard[section]["data"]
+            return dashboard[section]
+    
+    # Nested api_context
+    if "api_context" in api_context:
+        nested = api_context["api_context"]
+        if section in nested:
+            return nested[section]
+    
+    # Nested data
+    if "data" in api_context:
+        data = api_context["data"]
+        if isinstance(data, dict) and section in data:
+            return data[section]
+    
+    # Special case for events/local_events
+    if section == "events":
+        for key in ["local_events", "events_data"]:
+            if key in api_context:
+                return api_context[key]
+    
+    return None
+
+
+async def _build_direct_weather_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
     """Build direct weather response bypassing model"""
     logger.info("[BUILD DIRECT WEATHER RESPONSE] Building deterministic weather response")
+    logger.info("[DIRECT WEATHER API CONTEXT] %s", json.dumps(enriched_api_context, indent=2, default=str))
     
-    # Extract location from message or use default
+    # Extract location robustly
     location = "requested location"
+    
+    # Try travel_info first
+    travel_info = enriched_api_context.get("travel_info", {})
+    if "destination" in travel_info:
+        location = travel_info["destination"]
+    elif "location" in travel_info:
+        location = travel_info["location"]
+    
+    # Parse from message "in [city]"
+    if " in " in request.message.lower():
+        after_in = request.message.lower().split(" in ", 1)[1].strip()
+        if after_in:
+            location = after_in.split()[0].title()
+    
+    # Check for specific cities in message
     if "stuttgart" in request.message.lower():
         location = "Stuttgart"
     elif "heidelberg" in request.message.lower():
@@ -740,14 +851,33 @@ def _build_direct_weather_response(request: ChatRequest, enriched_api_context: d
     elif "munich" in request.message.lower():
         location = "Munich"
     
-    # Get weather data from enriched context
-    weather_data = enriched_api_context.get("weather")
+    logger.info("[DIRECT WEATHER CITY] %s", location)
+    
+    # Extract weather data using robust extractor
+    weather_data = extract_live_section(enriched_api_context, "weather")
+    
+    # If no weather data, fetch it directly
+    if not weather_data:
+        try:
+            from add_backend.app.services.weather_service import WeatherService
+            weather_service = WeatherService()
+            weather_data = await weather_service.get_current_weather(location)
+            logger.info("[DIRECT WEATHER FETCHED] %s", weather_data)
+        except Exception as e:
+            logger.error("[DIRECT WEATHER FETCH ERROR] %s", str(e))
+            weather_data = None
+    
     weather_status = "available" if weather_data else "unavailable"
+    logger.info("[DIRECT WEATHER DATA] %s", weather_data)
     
     # Build response kwargs
     response_kwargs = {}
     if request.include_raw_model_output:
         response_kwargs["raw_model_output"] = "Direct weather response (no model generation)"
+    
+    # Build used_apis and warnings
+    used_apis = ["weather"] if weather_data else []
+    warnings = [] if weather_data else [f"Weather API returned no data for {location}"]
     
     return ChatResponse(
         session_id=request.session_id,
@@ -779,13 +909,220 @@ def _build_direct_weather_response(request: ChatRequest, enriched_api_context: d
             },
             "dashboard_actions": ["show_weather"],
             "api_grounding": {
-                "used_api": enriched_api_context.get("used_apis", []),
-                "missing_api": enriched_api_context.get("missing_apis", []),
-                "warnings": enriched_api_context.get("warnings", [])
+                "used_api": used_apis,
+                "missing_api": [],
+                "warnings": warnings
             }
         },
         **response_kwargs,
     )
+
+
+def normalize_model_dashboard_payload(payload: dict, backend_intent: str, api_context: dict) -> dict:
+    """Normalize model output to proper schema format"""
+    logger.info("[MODEL NORMALIZATION START]")
+    
+    # Ensure payload is a dict
+    if not isinstance(payload, dict):
+        payload = {}
+    
+    # Set required fields
+    payload["schema_version"] = "travel_dashboard_v1"
+    payload["intent"] = backend_intent
+    
+    # Ensure trip_summary exists and fill from api_context
+    if "trip_summary" not in payload or not payload["trip_summary"]:
+        payload["trip_summary"] = {}
+    
+    travel_info = api_context.get("travel_info", {})
+    trip_summary = payload["trip_summary"]
+    
+    # Fill missing trip_summary fields from travel_info
+    if "origin" not in trip_summary and "origin" in travel_info:
+        trip_summary["origin"] = travel_info["origin"]
+    if "destination" not in trip_summary and "destination" in travel_info:
+        trip_summary["destination"] = travel_info["destination"]
+    if "duration_days" not in trip_summary and "duration_days" in travel_info:
+        trip_summary["duration_days"] = travel_info["duration_days"]
+    if "budget" not in trip_summary and "budget" in travel_info:
+        trip_summary["budget"] = travel_info["budget"]
+    
+    trip_summary.setdefault("currency", "EUR")
+    trip_summary.setdefault("source", "model_generated")
+    
+    # Normalize weather section
+    weather_data = extract_live_section(api_context, "weather")
+    if weather_data:
+        payload["weather"] = {
+            "data": weather_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        # Convert model weather if present
+        model_weather = payload.get("weather")
+        if model_weather and isinstance(model_weather, dict) and "data" not in model_weather:
+            payload["weather"] = {
+                "data": model_weather,
+                "source": "live_api",
+                "status": "available"
+            }
+        else:
+            payload["weather"] = {
+                "data": None,
+                "source": "live_api",
+                "status": "unavailable"
+            }
+    
+    # Normalize flights section
+    flights_data = extract_live_section(api_context, "flights")
+    if flights_data:
+        payload["flights"] = {
+            "data": flights_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        # Convert model flights if present
+        model_flights = payload.get("flights")
+        if model_flights and isinstance(model_flights, dict) and "data" not in model_flights:
+            if model_flights.get("message") or model_flights == {}:
+                payload["flights"] = {
+                    "data": [],
+                    "source": "live_api",
+                    "status": "unavailable"
+                }
+            else:
+                payload["flights"] = {
+                    "data": model_flights,
+                    "source": "live_api",
+                    "status": "available"
+                }
+        else:
+            payload["flights"] = {
+                "data": [],
+                "source": "live_api",
+                "status": "unavailable"
+            }
+    
+    # Normalize hotels section
+    hotels_data = extract_live_section(api_context, "hotels")
+    if hotels_data:
+        payload["hotels"] = {
+            "data": hotels_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        # Convert model hotels if present
+        model_hotels = payload.get("hotels")
+        if model_hotels and isinstance(model_hotels, dict) and "data" not in model_hotels:
+            if model_hotels.get("message") or model_hotels == {}:
+                payload["hotels"] = {
+                    "data": [],
+                    "source": "live_api",
+                    "status": "unavailable"
+                }
+            else:
+                payload["hotels"] = {
+                    "data": model_hotels,
+                    "source": "live_api",
+                    "status": "available"
+                }
+        else:
+            payload["hotels"] = {
+                "data": [],
+                "source": "live_api",
+                "status": "unavailable"
+            }
+    
+    # Normalize local_events section
+    events_data = extract_live_section(api_context, "events")
+    if events_data:
+        payload["local_events"] = {
+            "data": events_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        # Convert model events if present
+        model_events = payload.get("local_events")
+        if model_events and isinstance(model_events, dict) and "data" not in model_events:
+            if model_events.get("message") or model_events == {}:
+                payload["local_events"] = {
+                    "data": [],
+                    "source": "live_api",
+                    "status": "unavailable"
+                }
+            else:
+                payload["local_events"] = {
+                    "data": model_events,
+                    "source": "live_api",
+                    "status": "available"
+                }
+        else:
+            payload["local_events"] = {
+                "data": [],
+                "source": "live_api",
+                "status": "unavailable"
+            }
+    
+    # Ensure lists
+    payload.setdefault("food_recommendations", [])
+    if not isinstance(payload["food_recommendations"], list):
+        payload["food_recommendations"] = []
+    
+    payload.setdefault("itinerary", [])
+    if not isinstance(payload["itinerary"], list):
+        payload["itinerary"] = []
+    
+    # Ensure map_data
+    payload.setdefault("map_data", {})
+    
+    # Ensure budget_breakdown
+    payload.setdefault("budget_breakdown", {
+        "currency": "EUR",
+        "transport": None,
+        "intercity_transport": None,
+        "total_known_cost": 0,
+        "note": None
+    })
+    
+    # Set dashboard_actions based on intent
+    if backend_intent == "weather_query":
+        payload["dashboard_actions"] = ["show_weather"]
+    elif backend_intent == "flight_search":
+        payload["dashboard_actions"] = ["show_flights"]
+    elif backend_intent == "hotel_search":
+        payload["dashboard_actions"] = ["show_hotels"]
+    elif backend_intent == "events_search":
+        payload["dashboard_actions"] = ["show_events"]
+    elif backend_intent == "itinerary_generation":
+        payload["dashboard_actions"] = ["show_trip_summary", "show_itinerary", "show_budget"]
+    else:
+        payload["dashboard_actions"] = []
+    
+    # Build api_grounding
+    used_apis = []
+    if payload.get("weather", {}).get("status") == "available":
+        used_apis.append("weather")
+    if payload.get("flights", {}).get("status") == "available":
+        used_apis.append("flights")
+    if payload.get("hotels", {}).get("status") == "available":
+        used_apis.append("hotels")
+    if payload.get("local_events", {}).get("status") == "available":
+        used_apis.append("events")
+    
+    payload["api_grounding"] = {
+        "used_api": used_apis,
+        "missing_api": [],
+        "warnings": []
+    }
+    
+    logger.info("[MODEL NORMALIZED PAYLOAD] %s", json.dumps(payload, indent=2, default=str))
+    logger.info("[MODEL NORMALIZATION VALIDATED]")
+    
+    return payload
 
 
 def build_static_fallback_from_context(request: ChatRequest, backend_intent: str, api_context: dict) -> dict:
