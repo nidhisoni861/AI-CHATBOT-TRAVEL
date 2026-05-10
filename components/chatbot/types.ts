@@ -41,6 +41,8 @@ export interface BudgetBreakdown {
   transport: number;
   food: number;
   activities: number;
+  accommodation: number;
+  intercity_transport: number;
   currency: string;
   total_known_cost: number;
   within_budget: boolean;

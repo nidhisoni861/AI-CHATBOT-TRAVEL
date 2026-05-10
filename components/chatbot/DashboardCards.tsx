@@ -130,6 +130,18 @@ function BudgetCard({ b }: { b: BudgetBreakdown }) {
             {b.activities} {b.currency}
           </span>
         </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Accommodation</span>
+          <span className="font-semibold">
+            {b.accommodation} {b.currency}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Intercity Transport</span>
+          <span className="font-semibold">
+            {b.intercity_transport} {b.currency}
+          </span>
+        </div>
         <div className="flex justify-between border-t border-green-200 pt-1">
           <span className="font-bold text-slate-700">Total</span>
           <span className="font-bold text-green-700">
