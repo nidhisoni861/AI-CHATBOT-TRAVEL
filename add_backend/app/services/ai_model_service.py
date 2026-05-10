@@ -769,8 +769,23 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     # Force minimum tokens for itinerary to prevent truncation
     if backend_intent == "itinerary_generation":
-        generation_tokens = max(generation_tokens, 1500)
-        logger.info("[GENERATION TOKENS] %s (forced minimum for itinerary)", generation_tokens)
+        duration_days = enriched_api_context.get("travel_info", {}).get("duration_days", 3)
+        
+        try:
+            duration_days_int = int(duration_days)
+        except Exception:
+            duration_days_int = 3
+
+        if duration_days_int >= 10:
+            generation_tokens = max(generation_tokens, 4500)
+        elif duration_days_int >= 7:
+            generation_tokens = max(generation_tokens, 3500)
+        elif duration_days_int >= 4:
+            generation_tokens = max(generation_tokens, 2500)
+        else:
+            generation_tokens = max(generation_tokens, 1500)
+            
+        logger.info("[MODEL ITINERARY TOKEN BUDGET] duration_days=%s generation_tokens=%s", duration_days_int, generation_tokens)
     else:
         logger.info("[GENERATION TOKENS] %s", generation_tokens)
     
@@ -841,6 +856,14 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     logger.info("[MODEL JSON REPAIR ATTEMPT]")
     
+    # Get duration for validation
+    duration_days = enriched_api_context.get("travel_info", {}).get("duration_days", 3)
+    try:
+        duration_days_int = int(duration_days)
+    except Exception:
+        duration_days_int = 3
+    
+    # First parsing attempt
     try:
         # Try parsing original first
         try:
@@ -855,6 +878,12 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
             dashboard_payload = parsed["dashboard_payload"]
         else:
             dashboard_payload = parsed
+        
+        # Validate itinerary has required days for itinerary_generation
+        if backend_intent == "itinerary_generation":
+            if not itinerary_has_required_days(dashboard_payload, duration_days_int):
+                logger.info("[ITINERARY VALIDATION FAILED] Missing required days, triggering retry")
+                raise ValueError("Itinerary missing required days")
         
         # Normalize model output to proper schema
         normalized_dashboard = normalize_model_dashboard_payload(dashboard_payload, backend_intent, enriched_api_context)
@@ -884,6 +913,95 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         logger.info("[GTR AFTER NORMALIZE]")
         logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
         logger.info("[RETURNING MODEL NORMALIZED RESPONSE] parse_success=True fallback_used=False")
+        
+    except Exception as first_exc:
+        # Retry with stricter prompt for itinerary generation
+        if backend_intent == "itinerary_generation":
+            logger.info("[MODEL RETRY ATTEMPT] First attempt failed, retrying with stricter prompt")
+            
+            # Build retry prompt
+            travel_info = enriched_api_context.get("travel_info", {})
+            retry_origin = travel_info.get("origin", "Origin")
+            retry_destination = travel_info.get("destination", "Destination")
+            
+            retry_prompt = (
+                "The previous output was invalid or incomplete.\n"
+                "Return ONLY valid JSON.\n"
+                f"Create exactly {duration_days_int} days.\n"
+                "Each day must have Morning, Afternoon, Evening.\n"
+                "Do not include weather/flights/hotels/events.\n"
+                "Use this exact schema:\n"
+                '{\n'
+                '  "assistant_message": f"Here is a {duration_days_int}-day budget trip plan from {retry_origin} to {retry_destination}.",\n'
+                '  "dashboard_payload": {\n'
+                f'    "intent": "{backend_intent}",\n'
+                '    "trip_summary": {\n'
+                f'      "origin": "{retry_origin}",\n'
+                f'      "destination": "{retry_destination}",\n'
+                f'      "duration_days": {duration_days_int},\n'
+                '      "budget": 500,\n'
+                '      "currency": "EUR",\n'
+                '      "source": "model_generated"\n'
+                '    },\n'
+                '    "food_recommendations": [...],\n'
+                '    "itinerary": [...]\n'
+                '  }\n'
+                '}\n'
+            )
+            
+            # Generate retry response
+            retry_raw_text = generate_text(tokenizer, model, retry_prompt, config)
+            retry_raw_text = retry_raw_text
+            logger.info("[MODEL RETRY OUTPUT LENGTH] %s", len(retry_raw_text or ""))
+            
+            try:
+                # Parse retry output
+                retry_parsed = parse_model_json_with_repair(retry_raw_text)
+                
+                # Extract dashboard payload
+                if "dashboard_payload" in retry_parsed:
+                    retry_dashboard_payload = retry_parsed["dashboard_payload"]
+                else:
+                    retry_dashboard_payload = retry_parsed
+                
+                # Validate retry itinerary
+                if not itinerary_has_required_days(retry_dashboard_payload, duration_days_int):
+                    raise ValueError("Retry itinerary still missing required days")
+                
+                # Normalize retry output
+                retry_normalized_dashboard = normalize_model_dashboard_payload(retry_dashboard_payload, backend_intent, enriched_api_context)
+                
+                # Build retry response
+                normalized = {
+                    "assistant_message": retry_parsed.get("assistant_message", f"Here is your {backend_intent.replace('_', ' ')} result."),
+                    "dashboard_payload": retry_normalized_dashboard
+                }
+                
+                # Apply API context truth
+                normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
+                
+                # Ensure flights are always present for itinerary generation
+                trip_summary = retry_normalized_dashboard.get("trip_summary") or {}
+                retry_normalized_dashboard = await ensure_flights_for_route(
+                    retry_normalized_dashboard,
+                    enriched_api_context,
+                    trip_summary.get("origin"),
+                    trip_summary.get("destination")
+                )
+                
+                # Update normalized response
+                normalized["dashboard_payload"] = retry_normalized_dashboard
+                
+                parse_success = True
+                retry_used = True
+                logger.info("[MODEL RETRY SUCCESS] parse_success=True retry_used=True")
+                
+            except Exception as retry_exc:
+                logger.error("[MODEL RETRY FAILED] %s", str(retry_exc))
+                raise retry_exc
+        else:
+            # For non-itinerary intents, just raise the original exception
+            raise first_exc
         
     except Exception as exc:
         # Log the actual validation error for debugging
@@ -981,6 +1099,14 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         normalized["dashboard_payload"]["budget_breakdown"] = calculate_budget_breakdown(
             normalized["dashboard_payload"]
         )
+        
+        # Add itinerary_source tracking
+        if retry_used:
+            normalized["dashboard_payload"]["itinerary_source"] = "model_generated_retry"
+        elif parse_success:
+            normalized["dashboard_payload"]["itinerary_source"] = "model_generated"
+        else:
+            normalized["dashboard_payload"]["itinerary_source"] = "model_failed"
     
     logger.info("[GTR AFTER SANITIZE]")
 
@@ -1457,6 +1583,10 @@ def normalize_model_dashboard_payload(payload: dict, backend_intent: str, api_co
         dashboard_actions = ["show_trip_summary", "show_itinerary", "show_budget"]
         if payload.get("flights", {}).get("status") == "available":
             dashboard_actions.append("show_flights")
+        if payload.get("hotels", {}).get("status") == "available":
+            dashboard_actions.append("show_hotels")
+        if payload.get("local_events", {}).get("status") == "available":
+            dashboard_actions.append("show_events")
         payload["dashboard_actions"] = dashboard_actions
     else:
         payload["dashboard_actions"] = []
@@ -1662,6 +1792,24 @@ def calculate_budget_breakdown(payload: dict) -> dict:
         "note": "Budget is estimated from available flight, hotel, food and itinerary data.",
         "source": "backend_budget_calculation"
     }
+
+
+def itinerary_has_required_days(payload: dict, duration_days: int) -> bool:
+    """
+    Check if itinerary contains all required days.
+    Returns True if all days from 1 to duration_days are present.
+    """
+    itinerary = payload.get("itinerary") or []
+    days = set()
+
+    for item in itinerary:
+        if isinstance(item, dict) and item.get("day") is not None:
+            try:
+                days.add(int(item["day"]))
+            except Exception:
+                pass
+
+    return set(range(1, duration_days + 1)).issubset(days)
 
 
 def normalize_hotels_result(hotel_result):
@@ -2150,7 +2298,7 @@ async def build_static_fallback_from_context(request: ChatRequest, backend_inten
     duration = travel_info.get("duration_days", 3)
     
     if backend_intent == "itinerary_generation":
-        # Build static fallback with preserved live API data
+        # Build static fallback with preserved live API data but empty itinerary
         fallback_payload = {
             "schema_version": "travel_dashboard_v1",
             "intent": "itinerary_generation",
@@ -2162,30 +2310,27 @@ async def build_static_fallback_from_context(request: ChatRequest, backend_inten
                 "currency": "EUR",
                 "source": "backend_extraction"
             },
-            "itinerary": [
-                {"day":1,"time":"Morning","activity":f"Travel from {origin} to {destination} and explore Old Town.","budget_eur":10},
-                {"day":1,"time":"Afternoon","activity":f"Visit {destination} Castle area and viewpoints.","budget_eur":10},
-                {"day":1,"time":"Evening","activity":"Budget dinner in city center.","budget_eur":15},
-                {"day":2,"time":"Morning","activity":"Walk along Philosophenweg.","budget_eur":0},
-                {"day":2,"time":"Afternoon","activity":"Explore Neckar river area and local neighborhoods.","budget_eur":5},
-                {"day":3,"time":"Morning","activity":"Visit free or low-cost museums or university area.","budget_eur":10}
-            ],
-            "food_recommendations": [
-                {"name":"Local Bakery","type":"food","price_range":"low","source":"static_fallback","rating":None},
-                {"name":"Traditional Café","type":"food","price_range":"low","source":"static_fallback","rating":None}
-            ],
+            "itinerary": [],  # Empty - model failed, no backend-generated activities
+            "food_recommendations": [],  # Empty - model failed
             "budget_breakdown": {
                 "currency": "EUR",
-                "transport": None,
-                "intercity_transport": None,
+                "transport": 0,
+                "food": 0,
+                "activities": 0,
+                "accommodation": 0,
+                "intercity_transport": 0,
                 "total_known_cost": 0,
-                "note": None
+                "total": 0,
+                "remaining_budget": 0,
+                "within_budget": True,
+                "note": None,
+                "source": "empty_budget"
             },
             "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
             "api_grounding": {
                 "used_api": api_context.get("used_apis", []),
                 "missing_api": [],
-                "warnings": ["Model parsing failed, using static fallback"]
+                "warnings": ["Model could not generate complete valid itinerary"]
             }
         }
         
@@ -2201,7 +2346,7 @@ async def build_static_fallback_from_context(request: ChatRequest, backend_inten
         )
         
         return {
-            "assistant_message": f"Here is a {duration}-day budget trip plan from {origin} to {destination}.",
+            "assistant_message": "The model could not generate a complete valid itinerary. Please try again with fewer days or increase max_new_tokens.",
             "dashboard_payload": fallback_payload
         }
     elif backend_intent == "weather_query":
@@ -2781,45 +2926,60 @@ def _build_prompt(message: str, api_context: dict[str, Any], backend_intent: str
         )
     
     elif backend_intent == "itinerary_generation":
-        # Itinerary generation request with live API context
-        available_apis = []
-        if has_weather:
-            available_apis.append("weather")
-        if has_flights:
-            available_apis.append("flights")
-        if has_hotels:
-            available_apis.append("hotels")
-        if has_events:
-            available_apis.append("events")
-
+        # Get duration from API context
+        travel_info = api_context.get("travel_info", {})
+        duration_days = travel_info.get("duration_days", 3)
+        origin = travel_info.get("origin", "Origin")
+        destination = travel_info.get("destination", "Destination")
+        
         return (
-            "You are Wanderly. Output ONE compact JSON object. No markdown. Start with { end with }.\n"
+            "Return valid JSON only.\n"
+            "No markdown.\n"
+            "No explanation outside JSON.\n"
+            "Do not include weather.\n"
+            "Do not include flights.\n"
+            "Do not include hotels.\n"
+            "Do not include local_events.\n"
+            "Backend will add those sections.\n"
+            f"Create exactly {duration_days} days.\n"
+            "Each day must have exactly 3 items:\n"
+            "Morning, Afternoon, Evening.\n"
+            "Keep each activity short.\n"
+            "Every itinerary item must have:\n"
+            "day, time, activity, budget_eur\n"
             f"USER: {message}\n"
             f"DETECTED INTENT: {backend_intent}\n"
             f"LIVE API CONTEXT: {api_summary}\n"
-            f"AVAILABLE APIS: {', '.join(available_apis) if available_apis else 'None'}\n"
-            "Rules:\n"
-            f"- Max itinerary items: {max_items}\n"
-            "- Max food_recommendations: 2\n"
-            "- Keep activities concise and realistic\n"
-            "- Use live API data if available\n"
-            "- Complete all JSON braces and quotes\n"
-            "You must output EXACTLY this JSON structure:\n"
-            '{"assistant_message":"Here is your travel plan with itinerary and recommendations.",'
-            '"dashboard_payload":{'
-            f'"intent":"{backend_intent}",'
-            '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"...","origin":"..."},'
-            '"weather":{...weather_data_if_available...},'
-            '"flights":{...flight_data_if_available...},'
-            '"hotels":{...hotel_data_if_available...},'
-            '"local_events":{...event_data_if_available...},'
-            '"food_recommendations":[{"name":"...","price_range":"...","type":"food"}],'
-            '"itinerary":[{"day":1,"time":"Morning","activity":"...","budget_eur":0}],'
-            '"budget_breakdown":{"currency":"EUR","transport":...,"food":...,"activities":...,"total":...},'
-            '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
-            '"api_grounding":{"used_api":[...successful_apis...],"missing_api":[...missing_apis...],"warnings":[]}'
-            "}}\n"
-            f"APIs available: {', '.join(available_apis) if available_apis else 'None'}\n"
+            "Required JSON shape:\n"
+            '{\n'
+            '  "assistant_message": f"Here is a {duration_days}-day budget trip plan from {origin} to {destination}.",\n'
+            '  "dashboard_payload": {\n'
+            f'    "intent": "{backend_intent}",\n'
+            '    "trip_summary": {\n'
+            f'      "origin": "{origin}",\n'
+            f'      "destination": "{destination}",\n'
+            f'      "duration_days": {duration_days},\n'
+            '      "budget": 500,\n'
+            '      "currency": "EUR",\n'
+            '      "source": "model_generated"\n'
+            '    },\n'
+            '    "food_recommendations": [\n'
+            '      {\n'
+            '        "name": "...",\n'
+            '        "price_range": "€5-10",\n'
+            '        "type": "..."\n'
+            '      }\n'
+            '    ],\n'
+            '    "itinerary": [\n'
+            '      {\n'
+            '        "day": 1,\n'
+            '        "time": "Morning",\n'
+            '        "activity": "...",\n'
+            '        "budget_eur": 0\n'
+            '      }\n'
+            '    ]\n'
+            '  }\n'
+            '}\n'
         )
     else:
         # Default fallback for other intents
