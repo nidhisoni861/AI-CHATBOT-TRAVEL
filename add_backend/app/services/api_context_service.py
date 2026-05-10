@@ -351,8 +351,8 @@ class ApiContextService:
                         "return_date": return_date,
                         "departure_time": "08:00",
                         "arrival_time": "09:30",
-                        "airline": "Lufthansa",
-                        "flight_number": "LH123",
+                        "airline": "Emirates Airline",
+                        "flight_number": "EK-2026",
                         "price": f"${150 + hash(travel_info['origin'] + travel_info['destination']) % 200}",
                         "source": "static_fallback"
                     },
@@ -363,8 +363,8 @@ class ApiContextService:
                         "return_date": return_date,
                         "departure_time": "14:00",
                         "arrival_time": "15:30",
-                        "airline": "Eurowings",
-                        "flight_number": "EW456",
+                        "airline": "Emirates Airline",
+                        "flight_number": "EK-2027",
                         "price": f"${120 + hash(travel_info['destination'] + travel_info['origin']) % 180}",
                         "source": "static_fallback"
                     }

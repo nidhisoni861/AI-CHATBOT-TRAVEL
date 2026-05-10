@@ -52,7 +52,8 @@ class FlightService:
                 departure_date=departure_date,
                 return_date=return_date,
                 price="$250-350",
-                airline="Multiple airlines available"
+                airline="Emirates Airline",
+                flight_number="EK-2026"
             )
         ]
         

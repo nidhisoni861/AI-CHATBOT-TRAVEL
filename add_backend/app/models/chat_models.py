@@ -26,6 +26,7 @@ class FlightInfo(BaseModel):
     return_date: Optional[str] = None
     price: Optional[str] = None
     airline: Optional[str] = None
+    flight_number: Optional[str] = None
 
 
 class HotelInfo(BaseModel):

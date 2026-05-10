@@ -160,8 +160,8 @@ def build_static_fallback_flights(origin: str, destination: str, departure_date:
             "return_date": return_date,
             "departure_time": "08:00",
             "arrival_time": "09:30",
-            "airline": "Lufthansa",
-            "flight_number": "LH123",
+            "airline": "Emirates Airline",
+            "flight_number": "EK-2026",
             "price": f"${150 + hash(origin + destination) % 200}",
             "source": "static_fallback"
         },
@@ -172,8 +172,8 @@ def build_static_fallback_flights(origin: str, destination: str, departure_date:
             "return_date": return_date,
             "departure_time": "14:00",
             "arrival_time": "15:30",
-            "airline": "Eurowings",
-            "flight_number": "EW456",
+            "airline": "Emirates Airline",
+            "flight_number": "EK-2027",
             "price": f"${120 + hash(destination + origin) % 180}",
             "source": "static_fallback"
         }
@@ -403,7 +403,8 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
                             "destination": "Munich",
                             "departure_time": "09:30",
                             "arrival_time": "10:45",
-                            "airline": "Lufthansa",
+                            "airline": "Emirates Airline",
+                            "flight_number": "EK-2026",
                             "price": 89.99
                         }
                     ],
@@ -1436,7 +1437,8 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
             "departure_date": departure_date,
             "return_date": return_date,
             "price": "€120-€180",
-            "airline": "Lufthansa / Eurowings",
+            "airline": "Emirates Airline",
+            "flight_number": "EK-2026",
             "departure_time": "Morning",
             "arrival_time": "Same day",
             "duration": "Approx. 1h 10m",
@@ -1448,7 +1450,8 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
             "departure_date": departure_date,
             "return_date": return_date,
             "price": "€150-€220",
-            "airline": "Multiple airlines",
+            "airline": "Emirates Airline",
+            "flight_number": "EK-2027",
             "departure_time": "Afternoon",
             "arrival_time": "Same day",
             "duration": "Approx. 1h 15m",
