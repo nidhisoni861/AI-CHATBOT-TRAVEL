@@ -39,6 +39,47 @@ async function callTranslate(
   return res.json() as Promise<{ translated: string; detectedLang: string }>;
 }
 
+// Translate dynamic text inside dashboard_payload (weather description + itinerary activities)
+async function translateDashboard(
+  payload: ChatMessage["dashboard"],
+  lang: string
+): Promise<ChatMessage["dashboard"]> {
+  if (!payload || lang === "en") return payload;
+
+  // Collect dynamic strings to translate
+  const texts: string[] = [];
+  if (payload.weather?.data?.description) texts.push(payload.weather.data.description);
+  const activityStart = texts.length;
+  payload.itinerary?.forEach((item) => texts.push(item.activity));
+
+  if (!texts.length) return payload;
+
+  const res = await fetch("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts, targetLang: lang }),
+  });
+  if (!res.ok) return payload;
+
+  const { translations } = await res.json() as { translations: string[] };
+  if (!translations?.length) return payload;
+
+  // Apply translations back — deep clone first to avoid mutating original
+  const p = JSON.parse(JSON.stringify(payload)) as NonNullable<ChatMessage["dashboard"]>;
+
+  if (p.weather?.data && activityStart > 0) {
+    p.weather.data.description = translations[0];
+  }
+  if (p.itinerary) {
+    p.itinerary = p.itinerary.map((item, i) => ({
+      ...item,
+      activity: translations[activityStart + i] ?? item.activity,
+    }));
+  }
+
+  return p;
+}
+
 export default function ChatBotPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([initialMessage()]);
   const [input, setInput] = useState("");
@@ -98,11 +139,18 @@ export default function ChatBotPanel() {
       const englishReply =
         data.assistant_message ?? "I couldn't process that. Please try again.";
 
-      // ── Step 3: Translate reply back to the user's language ──────────────────
+      // ── Step 3: Translate reply + dashboard dynamic fields to user's language ──
       let displayReply = englishReply;
+      const rawDashboard = (data.dashboard_payload as ChatMessage["dashboard"]) ?? null;
+      let translatedDashboard = rawDashboard;
+
       if (detectedLang !== "en") {
-        const { translated } = await callTranslate(englishReply, detectedLang);
+        const [{ translated }, dashboard] = await Promise.all([
+          callTranslate(englishReply, detectedLang),
+          translateDashboard(rawDashboard, detectedLang),
+        ]);
         displayReply = translated;
+        translatedDashboard = dashboard ?? null;
       }
 
       // ── Step 4: Show in chat & speak aloud in the user's language ────────────
@@ -114,8 +162,8 @@ export default function ChatBotPanel() {
           text: displayReply,
           time: makeTimestamp(),
           detectedLang,
-          dashboard: (data.dashboard_payload as ChatMessage["dashboard"]) ?? null,
-          showDashboard: !!data.dashboard_payload,
+          dashboard: translatedDashboard ?? null,
+          showDashboard: !!rawDashboard,
         },
       ]);
 
