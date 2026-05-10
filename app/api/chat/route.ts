@@ -1,5 +1,16 @@
 import type { NextRequest } from "next/server";
 
+function inferMaxTokens(message: string): number {
+  const m = message.match(/(\d+)[- ]day/i);
+  if (m) {
+    const days = parseInt(m[1], 10);
+    if (days >= 7) return 3000;
+    if (days >= 5) return 2500;
+    if (days >= 3) return 2000;
+  }
+  return 1500;
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
 
@@ -10,7 +21,7 @@ export async function POST(request: NextRequest) {
       session_id: body.session_id,
       message: body.message,
       model_variant: "fine_tuned",
-      max_new_tokens: 600,
+      max_new_tokens: inferMaxTokens(body.message ?? ""),
       include_raw_model_output: false,
     }),
   });

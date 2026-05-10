@@ -73,8 +73,7 @@ export default function ChatBotPanel() {
           text: assistantText,
           time: makeTimestamp(),
           dashboard: data.dashboard_payload ?? null,
-          showDashboard:
-            !data.fallback_used && data.parse_success && !!data.dashboard_payload,
+          showDashboard: !!data.dashboard_payload,
         },
       ]);
 
