@@ -24,12 +24,12 @@ export function ChatHeader({ voiceEnabled, onToggleVoice }: ChatHeaderProps) {
         </div>
         <div>
           <div className="flex items-center gap-1.5">
-            <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+            <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">
               Roamora AI
             </h1>
-            <Sparkles className="h-5 w-5 text-teal-500" />
+            <Sparkles className="h-5 w-5 text-teal-300" />
           </div>
-          <p className="mt-0.5 text-xs font-medium text-slate-500 sm:text-sm">
+          <p className="mt-0.5 text-xs font-medium text-white/70 sm:text-sm">
             Your intelligent travel companion
           </p>
         </div>

@@ -15,15 +15,15 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="relative h-screen overflow-hidden bg-slate-950 text-slate-950">
+    <main className="relative h-screen overflow-hidden bg-blue-950 text-slate-950">
       <div
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('/images/travel-bg.png')",
+          backgroundImage: "url('/background.jpeg')",
         }}
       />
 
-      <div className="absolute inset-0 z-[1] bg-gradient-to-r from-cyan-100/25 via-white/10 to-rose-200/25" />
+      <div className="absolute inset-0 z-[1] bg-gradient-to-br from-blue-900/40 via-blue-800/20 to-blue-950/50" />
 
       <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden">
         <div className="animate-float-slow absolute -left-16 top-10 h-72 w-72 rounded-full bg-pink-200/30 blur-3xl" />

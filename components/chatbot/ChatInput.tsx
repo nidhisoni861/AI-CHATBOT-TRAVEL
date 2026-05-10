@@ -28,7 +28,7 @@ export function ChatInput({
   }
 
   return (
-    <footer className="mt-4 rounded-[22px] border border-white/70 bg-white/75 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] sm:mt-5 sm:p-2">
+    <footer className="mt-4 rounded-[22px] border border-white/20 bg-white/15 p-1.5 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:mt-5 sm:p-2">
       <div className="flex items-center gap-1.5 sm:gap-2">
         {/* New chat */}
         <button
@@ -36,7 +36,7 @@ export function ChatInput({
           aria-label="New chat"
           onClick={onNewChat}
           disabled={loading}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50 sm:h-11 sm:w-11"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white shadow-sm transition hover:bg-white/30 hover:text-teal-200 disabled:opacity-50 sm:h-11 sm:w-11"
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -58,7 +58,7 @@ export function ChatInput({
           placeholder={isRecording ? "Listening…" : "Ask anything about travel..."}
           rows={1}
           disabled={loading}
-          className="min-w-0 flex-1 resize-none bg-transparent px-2 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none disabled:opacity-50"
+          className="min-w-0 flex-1 resize-none bg-transparent px-2 text-sm font-medium text-white placeholder-white/50 focus:outline-none disabled:opacity-50"
         />
 
         {/* Mic / STT button */}
@@ -70,7 +70,7 @@ export function ChatInput({
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm transition sm:h-11 sm:w-11 ${
             isRecording
               ? "animate-pulse bg-red-500 text-white"
-              : "bg-white text-slate-700 hover:text-teal-700"
+              : "bg-white/20 text-white hover:text-teal-200"
           }`}
         >
           {isRecording ? (
