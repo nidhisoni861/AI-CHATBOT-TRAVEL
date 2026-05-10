@@ -532,8 +532,8 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
             parse_success = True
             fallback_used = False
         except ValidationError as validation_exc:
-            logger.error(f"[PYDANTIC VALIDATION ERROR] {json.dumps(validation_exc.errors(), indent=2)}")
-            logger.error(f"[INVALID PAYLOAD] {json.dumps(temp_payload, indent=2, default=str)}")
+            logger.error(f"[DASHBOARD VALIDATION ERROR] {json.dumps(validation_exc.errors(), indent=2)}")
+            logger.error(f"[FAILED DASHBOARD PAYLOAD] {json.dumps(temp_payload, indent=2, default=str)}")
             
             # Build error response with actual validation details
             parse_success = False
@@ -604,6 +604,7 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     """
     Enforce strict intent-based dashboard payload cleanup
     Removes all irrelevant fields based on detected intent
+    Always returns a valid payload with full schema sections
     """
     intent = payload.get("intent", "")
     
@@ -611,13 +612,48 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     if not payload or not isinstance(payload, dict):
         return payload
     
+    # Base structure with all required fields
+    base_payload = {
+        "schema_version": payload.get("schema_version", "travel_dashboard_v1"),
+        "intent": intent,
+        "trip_summary": payload.get("trip_summary", {}),
+        "flight": payload.get("flight", None),
+        "stay_recommendations": payload.get("stay_recommendations", []),
+        "weather": payload.get("weather", None),
+        "flights": payload.get("flights", []),
+        "hotels": payload.get("hotels", []),
+        "local_events": payload.get("local_events", []),
+        "food_recommendations": payload.get("food_recommendations", []),
+        "itinerary": payload.get("itinerary", []),
+        "map_data": payload.get("map_data", {}),
+        "budget_breakdown": payload.get("budget_breakdown", {
+            "currency": "EUR",
+            "transport": None,
+            "intercity_transport": None,
+            "total_known_cost": 0,
+            "note": None
+        }),
+        "dashboard_actions": payload.get("dashboard_actions", []),
+        "api_grounding": payload.get("api_grounding", {
+            "used_api": [],
+            "missing_api": [],
+            "warnings": []
+        })
+    }
+    
     if intent == "weather_query":
         # Weather-only response: keep only weather data
         return {
-            **payload,  # Keep existing structure
+            **base_payload,
             "food_recommendations": [],
             "itinerary": [],
-            "budget_breakdown": None,
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
             "map_data": None,
             "dashboard_actions": ["show_weather"],
             "api_grounding": {
@@ -629,10 +665,16 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     elif intent == "flight_search":
         # Flight-only response: keep only flights data
         return {
-            **payload,  # Keep existing structure
+            **base_payload,
             "food_recommendations": [],
             "itinerary": [],
-            "budget_breakdown": None,
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
             "map_data": None,
             "dashboard_actions": ["show_flights"],
             "api_grounding": {
@@ -644,10 +686,16 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     elif intent == "hotel_search":
         # Hotel-only response: keep only hotels data
         return {
-            **payload,  # Keep existing structure
+            **base_payload,
             "food_recommendations": [],
             "itinerary": [],
-            "budget_breakdown": None,
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
             "map_data": None,
             "dashboard_actions": ["show_hotels"],
             "api_grounding": {
@@ -659,10 +707,16 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     elif intent == "events_search":
         # Events-only response: keep only events data
         return {
-            **payload,  # Keep existing structure
+            **base_payload,
             "food_recommendations": [],
             "itinerary": [],
-            "budget_breakdown": None,
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
             "map_data": None,
             "dashboard_actions": ["show_events"],
             "api_grounding": {
@@ -671,9 +725,20 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
                 "warnings": []
             }
         }
+    elif intent == "itinerary_generation":
+        # Itinerary generation: keep trip, itinerary, budget
+        return {
+            **base_payload,
+            "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": [],
+                "warnings": []
+            }
+        }
     else:
-        # Multi-service or general request: keep full structure
-        return payload
+        # Default/error: keep full structure
+        return base_payload
 
 
 def _get_model(variant: ModelVariant, config: AdapterConfig):
