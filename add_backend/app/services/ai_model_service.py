@@ -2142,14 +2142,26 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     logger.info("[FLIGHT RAW MESSAGE] %s", request.message)
     logger.info("[FLIGHT TRAVEL INFO] %s", travel_info)
 
-    from_match = re.search(r"from\s+([a-zA-ZäöüÄÖÜß]+)", message_lower)
-    to_match = re.search(r"\bto\s+([a-zA-ZäöüÄÖÜß]+)", message_lower)
+    city_pattern = r"(sttugart|stuttgart|berlin|munich|münchen|heidelberg)"
 
-    if from_match:
-        origin_raw = from_match.group(1).strip()
+    route_match = re.search(
+        rf"from\s+{city_pattern}\s+to\s+{city_pattern}",
+        message_lower
+    )
 
-    if to_match:
-        destination_raw = to_match.group(1).strip()
+    if route_match:
+        origin_raw = route_match.group(1)
+        destination_raw = route_match.group(2)
+    else:
+        from_match = re.search(rf"from\s+{city_pattern}", message_lower)
+        to_matches = list(re.finditer(rf"\bto\s+{city_pattern}\b", message_lower))
+
+        if from_match:
+            origin_raw = from_match.group(1)
+
+        if to_matches:
+            # use last valid city after "to", not "to see"
+            destination_raw = to_matches[-1].group(1)
 
     origin = CITY_ALIASES.get(origin_raw, origin_raw.title()) if origin_raw else None
     destination = CITY_ALIASES.get(destination_raw, destination_raw.title()) if destination_raw else None
@@ -2282,12 +2294,20 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     }
 
     flight_prices = []
+
     for flight in payload.get("flights", {}).get("data", []):
+        price_value = None
+
         if isinstance(flight, dict):
-            price_text = str(flight.get("price", ""))
-            numbers = re.findall(r"\d+", price_text)
-            if numbers:
-                flight_prices.append(int(numbers[0]))
+            price_value = flight.get("price")
+        else:
+            price_value = getattr(flight, "price", None)
+
+        price_text = str(price_value or "")
+        numbers = re.findall(r"\d+", price_text)
+
+        if numbers:
+            flight_prices.append(int(numbers[0]))
 
     transport_cost = min(flight_prices) if flight_prices else 0
 
@@ -2307,7 +2327,10 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         "source": "backend_budget_calculation"
     }
 
-    logger.info("[LIVE FLIGHT PRICE STRINGS] %s", [f.get("price") for f in payload.get("flights", {}).get("data", []) if isinstance(f, dict)])
+    logger.info("[LIVE FLIGHT PRICE VALUES RAW] %s", [
+        f.get("price") if isinstance(f, dict) else getattr(f, "price", None)
+        for f in payload.get("flights", {}).get("data", [])
+    ])
     logger.info("[LIVE FLIGHT PRICE_NUMBERS] %s", flight_prices)
     logger.info("[LIVE FLIGHT TRANSPORT_COST] %s", transport_cost)
 
