@@ -1222,30 +1222,49 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
     adapter_loaded = selected_model == "fine_tuned"
     
-    # Extract origin and destination from enriched context
-    travel_info = enriched_api_context.get("travel_info", {})
-    origin = travel_info.get("origin")
-    destination = travel_info.get("destination")
-    
-    # Apply city normalization from message if needed
+    # Extract route from message first (highest priority)
     message_lower = request.message.lower()
+    origin_raw = None
+    destination_raw = None
     
-    # Extract cities from message for normalization
-    for city_alias, normalized_city in CITY_ALIASES.items():
-        if city_alias in message_lower:
-            if not origin and "from" in message_lower:
-                # Check if this city appears after "from"
-                from_match = re.search(r'from\s+\w+', message_lower)
-                if from_match and city_alias in from_match.group():
-                    origin = normalized_city
-            if not destination and "to" in message_lower:
-                # Check if this city appears after "to"
-                to_match = re.search(r'to\s+\w+', message_lower)
-                if to_match and city_alias in to_match.group():
-                    destination = normalized_city
-            # If no from/to pattern, assume first mentioned is origin
-            elif not origin and city_alias in message_lower:
-                origin = normalized_city
+    logger.info("[FLIGHT RAW MESSAGE] %s", request.message)
+    
+    # Extract route from message using regex patterns
+    from_match = re.search(r'from\s+(\w+)', message_lower)
+    to_match = re.search(r'\bto\s+(munich|stuttgart|berlin|münchen|heidelberg)\b', message_lower)
+    
+    if from_match:
+        origin_raw = from_match.group(1)
+    if to_match:
+        destination_raw = to_match.group(1)
+    
+    # Fallback: check for cities without explicit from/to
+    if not origin_raw and not destination_raw:
+        for city_alias in CITY_ALIASES.keys():
+            if city_alias in message_lower:
+                if not origin_raw:
+                    origin_raw = city_alias
+                elif not destination_raw:
+                    destination_raw = city_alias
+                break
+    
+    # Apply city normalization
+    origin = None
+    destination = None
+    if origin_raw:
+        origin = CITY_ALIASES.get(origin_raw, origin_raw.title())
+    if destination_raw:
+        destination = CITY_ALIASES.get(destination_raw, destination_raw.title())
+    
+    # Fallback to enriched context only if message extraction fails
+    if not origin or not destination:
+        travel_info = enriched_api_context.get("travel_info", {})
+        origin = origin or travel_info.get("origin")
+        destination = destination or travel_info.get("destination")
+    
+    logger.info("[FLIGHT ROUTE REGEX MATCH] origin_raw=%s destination_raw=%s", origin_raw, destination_raw)
+    logger.info("[FLIGHT EXTRACTED ORIGIN] %s", origin)
+    logger.info("[FLIGHT EXTRACTED DESTINATION] %s", destination)
     
     logger.info("[FLIGHT SEARCH ORIGIN] %s", origin)
     logger.info("[FLIGHT SEARCH DESTINATION] %s", destination)
