@@ -470,19 +470,18 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     logger.info(f"[STARTUP] ai_model_service.py path: {__file__}")
     logger.info(f"[STARTUP] chat_router.py path: {Path(__file__).parent / 'routes' / 'chat_router.py'}")
     
-    # Enrich api_context if empty/default
-    enriched_api_context = request.api_context
-    if not enriched_api_context or (
-        not enriched_api_context.get("flights") and 
-        not enriched_api_context.get("hotels") and 
-        not enriched_api_context.get("weather") and 
-        not enriched_api_context.get("local_events")
-    ):
-        from add_backend.app.services.api_context_service import api_context_service
-        enriched_api_context = await api_context_service.build_api_context_from_message(
-            request.message, enriched_api_context
-        )
-        logger.info("Enriched api_context with live API data")
+    # Detect backend intent (this overrides model intent)
+    backend_intent = detect_user_intent(request.message)
+    logger.info("[BACKEND INTENT] %s", backend_intent)
+    
+    # Build API context based on backend intent
+    from add_backend.app.services.api_context_service import api_context_service
+    enriched_api_context = await api_context_service.build_api_context_from_message(
+        request.message, request.api_context
+    )
+    
+    logger.info("[API CONTEXT BUILT] %s", json.dumps(enriched_api_context, default=str))
+    logger.info("[USED API] %s", enriched_api_context.get("used_apis", []))
     
     logger.info("[GTR AFTER API CONTEXT]")
     
@@ -502,7 +501,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     logger.info("[GTR AFTER MODEL LOAD]")
     logger.info("Generating response with model_variant=%s", request.model_variant)
     tokenizer, model = _get_model(request.model_variant, config)
-    prompt = _build_prompt(request.message, enriched_api_context)
+    prompt = _build_prompt(request.message, enriched_api_context, backend_intent)
     raw_text = generate_text(tokenizer, model, prompt, config)
     
     logger.info("[GTR RAW OUTPUT] %s", raw_text)
@@ -640,7 +639,40 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     # Update assistant_message_source in dashboard_payload
     normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
     
-    # Final intent-based response cleanup
+    # Override model intent with backend intent
+    normalized["dashboard_payload"]["intent"] = backend_intent
+    logger.info("[FINAL INTENT AFTER OVERRIDE] %s", backend_intent)
+    
+    # Update assistant_message based on backend intent
+    if backend_intent == "weather_query":
+        # Extract location from message or use default
+        location = "requested location"
+        if "stuttgart" in request.message.lower():
+            location = "Stuttgart"
+        elif "heidelberg" in request.message.lower():
+            location = "Heidelberg"
+        elif "berlin" in request.message.lower():
+            location = "Berlin"
+        elif "munich" in request.message.lower():
+            location = "Munich"
+        
+        normalized["assistant_message"] = f"Here is the current weather information for {location}."
+    elif backend_intent == "itinerary_generation":
+        # Extract travel info
+        travel_info = enriched_api_context.get("travel_info", {})
+        origin = travel_info.get("origin", "Stuttgart")
+        destination = travel_info.get("destination", "Heidelberg")
+        duration = travel_info.get("duration_days", 3)
+        
+        normalized["assistant_message"] = f"Here is a {duration}-day budget trip plan from {origin} to {destination}."
+    elif backend_intent == "flight_search":
+        normalized["assistant_message"] = "Here are the available flight options for your requested route."
+    elif backend_intent == "hotel_search":
+        normalized["assistant_message"] = "Here are the available hotel options for your requested destination."
+    elif backend_intent == "events_search":
+        normalized["assistant_message"] = "Here are the available events and activities for your requested location."
+    
+    # Final intent-based response cleanup using backend intent
     normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
     
     logger.info("[GTR AFTER SANITIZE]")
@@ -698,6 +730,56 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     )
 
 
+def detect_user_intent(message: str) -> str:
+    """
+    Detect user intent from message with priority order
+    Backend intent must override model-generated intent
+    """
+    message_lower = message.lower()
+    
+    # Itinerary keywords (highest priority)
+    itinerary_keywords = [
+        "plan", "itinerary", "trip", "day", "days", "budget trip", "travel plan", 
+        "schedule", "route", "vacation", "weekend trip"
+    ]
+    
+    # Weather keywords
+    weather_keywords = [
+        "weather", "temperature", "forecast", "rain", "sunny", "cloudy"
+    ]
+    
+    # Flight keywords (explicit only)
+    flight_keywords = [
+        "flight", "flights", "fly", "airline", "airport", "airfare", "ticket", "plane"
+    ]
+    
+    # Hotel keywords
+    hotel_keywords = [
+        "hotel", "hotels", "stay", "accommodation", "room"
+    ]
+    
+    # Events keywords
+    events_keywords = [
+        "event", "activity", "things to do", "attraction", "museum", "concert",
+        "festival", "show", "entertainment", "tour", "sightseeing"
+    ]
+    
+    # Priority: itinerary > weather > flight > hotel > events
+    if any(keyword in message_lower for keyword in itinerary_keywords):
+        return "itinerary_generation"
+    elif any(keyword in message_lower for keyword in weather_keywords):
+        return "weather_query"
+    elif any(keyword in message_lower for keyword in flight_keywords):
+        return "flight_search"
+    elif any(keyword in message_lower for keyword in hotel_keywords):
+        return "hotel_search"
+    elif any(keyword in message_lower for keyword in events_keywords):
+        return "events_search"
+    else:
+        # Default fallback
+        return "itinerary_generation"
+
+
 def enforce_intent_specific_dashboard(payload: dict) -> dict:
     """
     Enforce strict intent-based dashboard payload cleanup
@@ -741,6 +823,10 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     
     if intent == "weather_query":
         # Weather-only response: keep only weather data
+        used_apis = []
+        if payload.get("weather") and payload.get("weather", {}).get("data"):
+            used_apis.append("weather")
+        
         return {
             **base_payload,
             "food_recommendations": [],
@@ -755,7 +841,7 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
             "map_data": None,
             "dashboard_actions": ["show_weather"],
             "api_grounding": {
-                "used_api": ["weather"],
+                "used_api": used_apis,
                 "missing_api": [],
                 "warnings": []
             }
@@ -824,12 +910,22 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
             }
         }
     elif intent == "itinerary_generation":
-        # Itinerary generation: keep trip, itinerary, budget
+        # Itinerary generation: keep trip, itinerary, budget + available APIs
+        used_apis = []
+        if payload.get("weather") and payload.get("weather", {}).get("data"):
+            used_apis.append("weather")
+        if payload.get("flights") and payload.get("flights", {}).get("data"):
+            used_apis.append("flights")
+        if payload.get("hotels") and payload.get("hotels", {}).get("data"):
+            used_apis.append("hotels")
+        if payload.get("local_events") and payload.get("local_events", {}).get("data"):
+            used_apis.append("events")
+        
         return {
             **base_payload,
             "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
             "api_grounding": {
-                "used_api": [],
+                "used_api": used_apis,
                 "missing_api": [],
                 "warnings": []
             }
@@ -911,7 +1007,7 @@ def _format_api_context_compact(api_context: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
-def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
+def _build_prompt(message: str, api_context: dict[str, Any], backend_intent: str) -> str:
     max_items = _detect_max_itinerary(message)
     api_summary = _format_api_context_compact(api_context)
     
@@ -921,18 +1017,20 @@ def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
     has_hotels = bool(api_context.get("hotels"))
     has_events = bool(api_context.get("local_events"))
     
-    # Build intent-aware prompt based on available services
-    if has_weather and not has_flights and not has_hotels and not has_events:
+    # Build intent-aware prompt based on backend intent and available services
+    if backend_intent == "weather_query":
         # Weather-only request
         return (
             "You are a weather API response generator. Output ONLY weather data. No other fields.\n"
             f"USER: {message}\n"
-            f"APIs: {api_summary}\n"
+            f"DETECTED INTENT: {backend_intent}\n"
+            f"LIVE API CONTEXT: {api_summary}\n"
+            "IMPORTANT: Use the provided live_api_context. Do not say no live API data was provided if api_context contains data.\n"
             "You must output EXACTLY this JSON structure:\n"
             '{"assistant_message":"Here is the current weather information for your requested location.",'
             '"dashboard_payload":{'
             '"schema_version":"travel_dashboard_v1",'
-            '"intent":"weather_query",'
+            f'"intent":"{backend_intent}",'
             '"weather":{...weather_data...},'
             '"flights":{"data":[],"source":"live_api","status":"unavailable"},'
             '"hotels":{"data":[],"source":"live_api","status":"unavailable"},'
@@ -1003,49 +1101,72 @@ def _build_prompt(message: str, api_context: dict[str, Any]) -> str:
             f"Hotel data available: {api_summary}\n"
         )
     
-    else:
-        # Multiple services or general request - use original itinerary logic
-        missing_apis: list[str] = []
-        if not api_context.get("flights"):
-            missing_apis.append("flights")
-        if not api_context.get("hotels"):
-            missing_apis.append("hotels")
-        if not api_context.get("weather"):
-            missing_apis.append("weather")
-        if not api_context.get("local_events"):
-            missing_apis.append("events")
-
-        missing_note = (
-            f"Missing APIs: {', '.join(missing_apis)}. "
-            "Do NOT invent flights, hotels, weather, or events. Backend will keep those fields null/empty."
-            if missing_apis
-            else "All APIs available. Use API data."
-        )
+    elif backend_intent == "itinerary_generation":
+        # Itinerary generation request with live API context
+        available_apis = []
+        if has_weather:
+            available_apis.append("weather")
+        if has_flights:
+            available_apis.append("flights")
+        if has_hotels:
+            available_apis.append("hotels")
+        if has_events:
+            available_apis.append("events")
 
         return (
-            "You are Wanderly. Output ONE compact JSON object. No markdown. No text before or after. Start with { end with }.\n"
-            f"Max itinerary items: {max_items}. Max food_recommendations: 3. Max dashboard_actions: 3.\n"
-            f"{missing_note}\n"
-            "Rules:\n"
-            "- Do NOT repeat the same activity or location in the itinerary.\n"
-            "- food_recommendations must contain ONLY food, cafes, restaurants, markets, bakeries, street food, or local dishes.\n"
-            "- Do NOT put viewpoints, museums, transport, parks, gardens, castles, routes, areas, or attractions inside food_recommendations.\n"
-            "- Do NOT output root-level used_api, missing_api, or warnings. API metadata belongs ONLY inside dashboard_payload.api_grounding.\n"
-            "- assistant_message must say: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.\n"
-            "Backend handles: flight, stay_recommendations, weather, local_events, map_data, schema_version.\n"
-            "You only output:\n"
-            '{"assistant_message":"<2-sentence summary ending with: Live flight, hotel, weather, and event data is not available yet, so those fields are intentionally empty.>",'
-            '"dashboard_payload":{'
-            '"intent":"itinerary_generation",'
-            '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"..."},'
-            '"food_recommendations":[{"name":"...","price_range":"..."}],'
-            '"itinerary":[{"day":1,"time":"Morning","activity":"...","budget_eur":0}],'
-            '"budget_breakdown":{"transport":"...","food":"...","activities":"...","total":"..."},'
-            '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
-            '"api_grounding":{"used_api":[],"missing_api":["flights","hotels","weather","events"],"warnings":[]}'
-            "}}\n"
+            "You are Wanderly, a travel planning assistant. Output ONE compact JSON object with a complete travel itinerary.\n"
             f"USER: {message}\n"
-            f"APIs: {api_summary}"
+            f"DETECTED INTENT: {backend_intent}\n"
+            f"LIVE API CONTEXT: {api_summary}\n"
+            f"AVAILABLE APIS: {', '.join(available_apis) if available_apis else 'None'}\n"
+            "IMPORTANT: Use the provided live_api_context. Do not say no live API data was provided if api_context contains data.\n"
+            "Rules:\n"
+            f"- Max itinerary items: {max_items}\n"
+            "- Max food_recommendations: 3\n"
+            "- Create realistic, specific activities with budget estimates\n"
+            "- food_recommendations must be actual food venues (restaurants, cafes, bakeries)\n"
+            "- Include trip_summary with extracted origin, destination, duration\n"
+            "- Create a budget_breakdown with realistic costs\n"
+            "- If live API data is available, incorporate it into the response\n"
+            "- Do NOT say 'no live API data was provided' if API context contains actual data\n"
+            "You must output EXACTLY this JSON structure:\n"
+            '{"assistant_message":"Here is a complete travel plan for your requested trip with itinerary and recommendations.",'
+            '"dashboard_payload":{'
+            f'"intent":"{backend_intent}",'
+            '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"...","origin":"..."},'
+            '"weather":{...weather_data_if_available...},'
+            '"flights":{...flight_data_if_available...},'
+            '"hotels":{...hotel_data_if_available...},'
+            '"local_events":{...event_data_if_available...},'
+            '"food_recommendations":[{"name":"...","price_range":"...","type":"food"}],'
+            '"itinerary":[{"day":1,"time":"Morning","activity":"...","budget_eur":0}],'
+            '"budget_breakdown":{"currency":"EUR","transport":...,"food":...,"activities":...,"total":...},'
+            '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
+            '"api_grounding":{"used_api":[...successful_apis...],"missing_api":[...missing_apis...],"warnings":[]}'
+            "}}\n"
+            f"Live API data is available for: {', '.join(available_apis) if available_apis else 'no APIs - create content from context'}\n"
+        )
+    else:
+        # Default fallback for other intents
+        return (
+            "You are a travel assistant. Output a basic response.\n"
+            f"USER: {message}\n"
+            f"DETECTED INTENT: {backend_intent}\n"
+            f"LIVE API CONTEXT: {api_summary}\n"
+            "IMPORTANT: Use the provided live_api_context. Do not say no live API data was provided if api_context contains data.\n"
+            '{"assistant_message":"Basic travel response.",'
+            '"dashboard_payload":{'
+            f'"intent":"{backend_intent}",'
+            '"weather":{...weather_data_if_available...},'
+            '"flights":{...flight_data_if_available...},'
+            '"hotels":{...hotel_data_if_available...},'
+            '"local_events":{...event_data_if_available...},'
+            '"food_recommendations":[],'
+            '"itinerary":[],'
+            '"budget_breakdown":{"currency":"EUR","transport":null,"food":null,"activities":null,"total":0},'
+            '"dashboard_actions":["show_error"],'
+            '"api_grounding":{"used_api":[...successful_apis...],"missing_api":[],"warnings":[]}'
+            "}}\n"
         )
 
 
