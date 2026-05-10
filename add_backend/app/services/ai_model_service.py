@@ -660,16 +660,6 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
         **raw_kwargs,
     )
 
-# FINAL SAFETY: This should never be reached, but if it is, return a valid response
-logger.error("[FINAL FALLBACK] generate_travel_response reached end without returning")
-return {
-    "parse_success": False,
-    "assistant_message": "Model generation reached end without result.",
-    "dashboard_payload": None,
-    "error": "missing_return_path"
-}
-
-
 def _get_model(variant: ModelVariant, config: AdapterConfig):
     global _loaded_model
 
