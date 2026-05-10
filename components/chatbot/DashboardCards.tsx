@@ -82,23 +82,30 @@ function WeatherCard({ w }: { w: WeatherData }) {
 }
 
 function FlightCard({ flights }: { flights: FlightData[] }) {
-  const f = flights[0];
   return (
     <div className="rounded-2xl border border-purple-100 bg-gradient-to-br from-purple-50 to-violet-50 p-3">
       <div className="mb-2 flex items-center gap-1.5">
         <Plane className="h-3.5 w-3.5 text-purple-600" />
-        <span className="text-xs font-bold text-purple-800">Flights</span>
+        <span className="text-xs font-bold text-purple-800">
+          Flights ({flights.length})
+        </span>
       </div>
-      <div className="space-y-1 text-xs">
-        <p className="font-semibold text-slate-800">
-          {f.origin} → {f.destination}
-        </p>
-        <p className="text-slate-500">
-          {f.departure_date}
-          {f.return_date ? ` – ${f.return_date}` : ""}
-        </p>
-        <p className="font-bold text-purple-700">{f.price}</p>
-        <p className="text-slate-500">{f.airline}</p>
+      <div className="max-h-48 space-y-2 overflow-y-auto">
+        {flights.map((f, i) => (
+          <div key={i} className="space-y-0.5 border-b border-purple-100 pb-2 last:border-0 last:pb-0 text-xs">
+            <p className="font-semibold text-slate-800">
+              {f.origin} → {f.destination}
+            </p>
+            <p className="text-slate-500">
+              {f.departure_date}
+              {f.return_date ? ` – ${f.return_date}` : ""}
+            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-slate-500">{f.airline}</p>
+              <p className="font-bold text-purple-700">{f.price}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
