@@ -879,11 +879,21 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         else:
             dashboard_payload = parsed
         
-        # Validate itinerary has required days for itinerary_generation
+        # Validate itinerary has required days and quality for itinerary_generation
         if backend_intent == "itinerary_generation":
             if not itinerary_has_required_days(dashboard_payload, duration_days_int):
                 logger.info("[ITINERARY VALIDATION FAILED] Missing required days, triggering retry")
                 raise ValueError("Itinerary missing required days")
+            
+            # Check for excessive repetition
+            if itinerary_has_too_many_repeats(dashboard_payload, max_repeat=1):
+                logger.info("[ITINERARY VALIDATION FAILED] Too many repeated activities, triggering retry")
+                raise ValueError("Itinerary has excessive repetition")
+            
+            # Check for sufficient diversity
+            if not itinerary_has_required_diversity(dashboard_payload, duration_days_int):
+                logger.info("[ITINERARY VALIDATION FAILED] Insufficient activity diversity, triggering retry")
+                raise ValueError("Itinerary lacks sufficient diversity")
         
         # Normalize model output to proper schema
         normalized_dashboard = normalize_model_dashboard_payload(dashboard_payload, backend_intent, enriched_api_context)
@@ -925,10 +935,12 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
             retry_destination = travel_info.get("destination", "Destination")
             
             retry_prompt = (
-                "The previous output was invalid or incomplete.\n"
+                "The previous itinerary was valid JSON but had quality issues.\n"
                 "Return ONLY valid JSON.\n"
                 f"Create exactly {duration_days_int} days.\n"
                 "Each day must have Morning, Afternoon, Evening.\n"
+                "Do not repeat the same activity more than once.\n"
+                "Use varied attractions and experiences for each day.\n"
                 "Do not include weather/flights/hotels/events.\n"
                 "Use this exact schema:\n"
                 '{\n'
@@ -1818,6 +1830,59 @@ def itinerary_has_required_days(payload: dict, duration_days: int) -> bool:
     return set(range(1, duration_days + 1)).issubset(days)
 
 
+def itinerary_has_too_many_repeats(payload: dict, max_repeat: int = 1) -> bool:
+    """
+    Return True if the same activity appears more than max_repeat times.
+    For long trips, exact same activity should not repeat.
+    """
+    if not payload or not isinstance(payload, dict):
+        return False
+
+    itinerary = payload.get("itinerary") or []
+    counts = {}
+
+    for item in itinerary:
+        if not isinstance(item, dict):
+            continue
+
+        activity = str(item.get("activity") or "").strip().lower()
+        if not activity:
+            continue
+
+        counts[activity] = counts.get(activity, 0) + 1
+
+        if counts[activity] > max_repeat:
+            return True
+
+    return False
+
+
+def itinerary_has_required_diversity(payload: dict, duration_days: int) -> bool:
+    """
+    Check if itinerary has sufficient unique activities.
+    For duration_days days with 3 items per day, need at least duration_days * 2 unique activities.
+    """
+    if not payload or not isinstance(payload, dict):
+        return False
+
+    itinerary = payload.get("itinerary") or []
+    activities = []
+
+    for item in itinerary:
+        if isinstance(item, dict):
+            activity = str(item.get("activity") or "").strip().lower()
+            if activity:
+                activities.append(activity)
+
+    if not activities:
+        return False
+
+    unique_count = len(set(activities))
+    required_min_unique = min(len(activities), duration_days * 2)
+
+    return unique_count >= required_min_unique
+
+
 def update_dashboard_actions_for_available_sections(payload: dict) -> dict:
     """
     Update dashboard_actions based on available API data sections.
@@ -2386,7 +2451,7 @@ async def build_static_fallback_from_context(request: ChatRequest, backend_inten
         )
         
         return {
-            "assistant_message": "The model could not generate a complete valid itinerary. Please try again with fewer days or increase max_new_tokens.",
+            "assistant_message": "The model could not generate a complete non-repetitive itinerary. Please try again with fewer days or increase max_new_tokens.",
             "dashboard_payload": fallback_payload
         }
     elif backend_intent == "weather_query":
