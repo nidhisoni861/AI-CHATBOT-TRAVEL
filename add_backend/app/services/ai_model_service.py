@@ -112,6 +112,218 @@ def _has_live_data(value: Any) -> bool:
     return bool(value)
 
 
+def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
+    """Build intent-aware mock response that matches expected structure."""
+    # Detect intent from message
+    message_lower = request.message.lower()
+    
+    # Weather intent detection
+    weather_keywords = ["weather", "temperature", "rain", "sunny", "cloudy", "forecast"]
+    if any(keyword in message_lower for keyword in weather_keywords):
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=request.model_variant,
+            adapter_loaded=False,  # Always false in mock mode
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Here is the current weather information for your requested location.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "weather_query",
+                "weather": {
+                    "data": {
+                        "location": "Stuttgart",
+                        "temperature": 22.5,
+                        "condition": "partly_cloudy",
+                        "humidity": 65,
+                        "wind_speed": 12.3
+                    },
+                    "source": "mock_api",
+                    "status": "available"
+                },
+                "flights": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "dashboard_actions": ["show_weather"],
+                "assistant_message_source": "mock_model",
+                "api_grounding": {
+                    "used_api": ["weather"],
+                    "missing_api": ["flights", "hotels", "events"],
+                    "warnings": []
+                }
+            }
+        )
+    
+    # Flight intent detection
+    flight_keywords = ["flight", "fly", "airplane", "airport", "from", "to", "berlin", "munich"]
+    if any(keyword in message_lower for keyword in flight_keywords):
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=request.model_variant,
+            adapter_loaded=False,
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Here are the available flight options for your requested route.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "flight_search",
+                "weather": {"data": None, "source": "mock_api", "status": "unavailable"},
+                "flights": {
+                    "data": [
+                        {
+                            "origin": "Berlin",
+                            "destination": "Munich",
+                            "departure_time": "09:30",
+                            "arrival_time": "10:45",
+                            "airline": "Lufthansa",
+                            "price": 89.99
+                        }
+                    ],
+                    "source": "mock_api",
+                    "status": "available"
+                },
+                "hotels": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "dashboard_actions": ["show_flights"],
+                "assistant_message_source": "mock_model",
+                "api_grounding": {
+                    "used_api": ["flights"],
+                    "missing_api": ["weather", "hotels", "events"],
+                    "warnings": []
+                }
+            }
+        )
+    
+    # Hotel intent detection
+    hotel_keywords = ["hotel", "stay", "accommodation", "room", "heidelberg"]
+    if any(keyword in message_lower for keyword in hotel_keywords):
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=request.model_variant,
+            adapter_loaded=False,
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Here are the available hotel options for your requested destination.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "hotel_search",
+                "weather": {"data": None, "source": "mock_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "hotels": {
+                    "data": [
+                        {
+                            "name": "Hotel Heidelberg",
+                            "location": "Heidelberg",
+                            "price_range": "moderate",
+                            "rating": 4.2
+                        }
+                    ],
+                    "source": "mock_api",
+                    "status": "available"
+                },
+                "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
+                "dashboard_actions": ["show_hotels"],
+                "assistant_message_source": "mock_model",
+                "api_grounding": {
+                    "used_api": ["hotels"],
+                    "missing_api": ["weather", "flights", "events"],
+                    "warnings": []
+                }
+            }
+        )
+    
+    # Default: itinerary generation
+    travel_info = api_context.get("travel_info", {})
+    destination = travel_info.get("destination", "Unknown")
+    duration = travel_info.get("duration_days", 2)
+    budget = travel_info.get("budget", "budget")
+    origin = travel_info.get("origin", "Berlin")
+    
+    # Build descriptive message
+    if origin != "Berlin":
+        travel_desc = f"{duration}-day trip from {origin} to {destination}"
+    else:
+        travel_desc = f"{duration}-day trip to {destination}"
+    
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=request.model_variant,
+        adapter_loaded=False,  # Always false in mock mode
+        parse_success=True,
+        fallback_used=False,
+        retry_used=False,
+        assistant_message=f"Mock response: API context orchestration completed successfully for {travel_desc}.",
+        dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
+            "intent": "itinerary_generation",
+            "trip_summary": {
+                "destination": destination,
+                "duration_days": duration,
+                "travelers": "solo",
+                "budget": budget,
+                "origin": origin,
+                "currency": "EUR",
+                "source": "backend_extraction"
+            },
+            "weather": {
+                "data": api_context.get("weather"),
+                "source": "mock_api",
+                "status": "unavailable"
+            },
+            "flights": {
+                "data": api_context.get("flights", []),
+                "source": "mock_api",
+                "status": "unavailable"
+            },
+            "hotels": {
+                "data": api_context.get("hotels", []),
+                "source": "mock_api",
+                "status": "unavailable"
+            },
+            "local_events": {
+                "data": api_context.get("local_events", []),
+                "source": "mock_api",
+                "status": "unavailable"
+            },
+            "food_recommendations": [
+                {"name": "Local Restaurant", "price_range": "moderate"},
+                {"name": "Traditional Café", "price_range": "low"}
+            ],
+            "itinerary": [
+                {"day": 1, "time": "Morning", "activity": "City tour", "budget_eur": 50},
+                {"day": 1, "time": "Afternoon", "activity": "Museum visit", "budget_eur": 25}
+            ],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": 100,
+                "food": 150,
+                "activities": 75,
+                "total": 325
+            },
+            "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+            "itinerary_source": "mock_model",
+            "assistant_message_source": "mock_model",
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": ["weather", "flights", "hotels", "events"],
+                "warnings": []
+            }
+        }
+    )
+
+
 def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> ChatResponse:
     """Build a mock response for testing orchestration without loading models"""
     # Extract travel information from api_context (populated by API context service)
@@ -213,7 +425,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     # Use mock mode if enabled
     if MOCK_MODEL:
         logger.info("Using mock model mode for local testing")
-        return _build_mock_response(request, enriched_api_context)
+        return _build_intent_aware_mock_response(request, enriched_api_context)
     
     # Real model generation
     config = AdapterConfig.from_env()
