@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from dataclasses import replace
@@ -408,6 +409,17 @@ def _build_mock_response(request: ChatRequest, api_context: dict[str, Any]) -> C
 
 
 async def generate_travel_response(request: ChatRequest) -> ChatResponse:
+    # Startup logging
+    try:
+        git_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], 
+                                      cwd=PROJECT_ROOT, text=True).strip()
+        logger.info(f"[STARTUP] Git commit: {git_commit}")
+    except Exception as e:
+        logger.info(f"[STARTUP] Could not get git commit: {e}")
+    
+    logger.info(f"[STARTUP] ai_model_service.py path: {__file__}")
+    logger.info(f"[STARTUP] chat_router.py path: {Path(__file__).parent / 'routes' / 'chat_router.py'}")
+    
     # Enrich api_context if empty/default
     enriched_api_context = request.api_context
     if not enriched_api_context or (
@@ -635,6 +647,7 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
     
     normalized["dashboard_payload"] = cleaned_payload
 
+    logger.info(f"[RETURN] About to return ChatResponse with parse_success={parse_success}, fallback_used={fallback_used}")
     return ChatResponse(
         session_id=request.session_id,
         selected_model=request.model_variant,
@@ -646,6 +659,15 @@ def enforce_intent_specific_dashboard(payload: dict) -> dict:
         dashboard_payload=normalized["dashboard_payload"],
         **raw_kwargs,
     )
+
+# FINAL SAFETY: This should never be reached, but if it is, return a valid response
+logger.error("[FINAL FALLBACK] generate_travel_response reached end without returning")
+return {
+    "parse_success": False,
+    "assistant_message": "Model generation reached end without result.",
+    "dashboard_payload": None,
+    "error": "missing_return_path"
+}
 
 
 def _get_model(variant: ModelVariant, config: AdapterConfig):
