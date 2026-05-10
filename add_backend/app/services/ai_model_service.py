@@ -1222,12 +1222,16 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
     adapter_loaded = selected_model == "fine_tuned"
     
+    # Get travel_info from enriched context at function scope
+    travel_info = enriched_api_context.get("travel_info", {})
+    
     # Extract route from message first (highest priority)
     message_lower = request.message.lower()
     origin_raw = None
     destination_raw = None
     
     logger.info("[FLIGHT RAW MESSAGE] %s", request.message)
+    logger.info("[FLIGHT TRAVEL INFO] %s", travel_info)
     
     # Extract route from message using regex patterns
     from_match = re.search(r'from\s+(\w+)', message_lower)
@@ -1258,7 +1262,6 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     
     # Fallback to enriched context only if message extraction fails
     if not origin or not destination:
-        travel_info = enriched_api_context.get("travel_info", {})
         origin = origin or travel_info.get("origin")
         destination = destination or travel_info.get("destination")
     
