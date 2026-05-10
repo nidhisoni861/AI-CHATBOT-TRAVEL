@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import subprocess
 
 from fastapi import APIRouter, Query
 
@@ -83,16 +84,35 @@ async def chat_get(
 
 @router.post("/chat", response_model=ChatResponse, response_model_exclude_none=True)
 async def chat_post(chat_request: ChatRequest) -> ChatResponse:
+    # Startup logging with git commit and file paths
+    try:
+        git_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], 
+                                      cwd=os.path.dirname(__file__), text=True).strip()
+        logger.info(f"[STARTUP] Git commit: {git_commit}")
+    except Exception as e:
+        logger.info(f"[STARTUP] Could not get git commit: {e}")
+    
+    logger.info(f"[STARTUP] chat_router.py path: {__file__}")
+    logger.info(f"[STARTUP] ai_model_service.py path: {os.path.join(os.path.dirname(__file__), 'services', 'ai_model_service.py')}")
+    
     # Log incoming request details
     logger.info(f"[CHAT REQUEST] session_id={chat_request.session_id}")
     logger.info(f"[CHAT REQUEST] message={chat_request.message}")
     logger.info(f"[CHAT REQUEST] model_variant={chat_request.model_variant}")
+    logger.info(f"[CHAT REQUEST] selected_model={getattr(chat_request, 'selected_model', 'None')}")
     logger.info(f"[CHAT REQUEST] max_new_tokens={chat_request.max_new_tokens}")
     logger.info(f"[CHAT REQUEST] include_raw_model_output={chat_request.include_raw_model_output}")
     
     # Log environment variables
     logger.info(f"[ENV] WANDERLY_MOCK_MODEL={os.getenv('WANDERLY_MOCK_MODEL', 'false')}")
     logger.info(f"[ENV] BACKEND_PRELOAD_MODEL={os.getenv('BACKEND_PRELOAD_MODEL', 'false')}")
+    
+    # Resolve selected model properly
+    selected_model = chat_request.model_variant or getattr(chat_request, 'selected_model', 'base')
+    adapter_loaded = selected_model == "fine_tuned"
+    
+    logger.info(f"[RESOLVED] selected_model={selected_model}")
+    logger.info(f"[RESOLVED] adapter_loaded={adapter_loaded}")
     
     try:
         # Get API context first for potential fallback
@@ -106,8 +126,6 @@ async def chat_post(chat_request: ChatRequest) -> ChatResponse:
         # HARD GUARD: Check for None immediately
         if response is None:
             logger.error("[HARD GUARD] generate_travel_response returned None")
-            selected_model = chat_request.model_variant or getattr(chat_request, 'selected_model', 'base')
-            adapter_loaded = selected_model == "fine_tuned"
             
             logger.info(f"[HARD GUARD] session_id={chat_request.session_id}")
             logger.info(f"[HARD GUARD] selected_model={selected_model}")
@@ -122,6 +140,11 @@ async def chat_post(chat_request: ChatRequest) -> ChatResponse:
             )
         
         logger.info(f"[GENERATE RESPONSE SUCCESS] parse_success={response.parse_success}, fallback_used={response.fallback_used}")
+        
+        # Add raw model output if requested and response supports it
+        if chat_request.include_raw_model_output and hasattr(response, 'raw_model_output'):
+            logger.info(f"[RAW MODEL OUTPUT IN RESPONSE] {response.raw_model_output}")
+        
         return response
     except Exception as exc:
         # Log the actual exception
