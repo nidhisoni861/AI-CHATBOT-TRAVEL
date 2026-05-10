@@ -268,8 +268,12 @@ class ApiContextService:
             "detected_intent": intent  # Include detected intent for debugging
         }
         
-        # Only fetch weather if user asked for it
-        if intent["weather"]:
+        # For itinerary requests, automatically fetch weather, hotels, and events
+        # For explicit requests, only fetch the requested service
+        is_itinerary = intent.get("itinerary_generation", False)
+        
+        # Weather: fetch for itinerary or explicit weather request
+        if is_itinerary or intent.get("weather", False):
             try:
                 weather = await self.weather_service.get_current_weather(travel_info["destination"])
                 if weather:
@@ -282,8 +286,8 @@ class ApiContextService:
                 enriched_context["warnings"].append(f"Weather service error: {str(e)}")
                 enriched_context["missing_apis"].append("weather")
         
-        # Only fetch flights if user asked for them
-        if intent["flights"]:
+        # Flights: only fetch for explicit flight request (not automatic for itinerary)
+        if intent.get("flights", False):
             try:
                 flights = await self.flight_service.search_flights(
                     travel_info["origin"],
@@ -301,8 +305,8 @@ class ApiContextService:
                 enriched_context["warnings"].append(f"Flight service error: {str(e)}")
                 enriched_context["missing_apis"].append("flights")
         
-        # Only fetch hotels if user asked for them
-        if intent["hotels"]:
+        # Hotels: fetch for itinerary or explicit hotel request
+        if is_itinerary or intent.get("hotels", False):
             try:
                 hotels = await self.hotel_service.search_hotels(
                     travel_info["destination"],
@@ -320,8 +324,8 @@ class ApiContextService:
                 enriched_context["warnings"].append(f"Hotel service error: {str(e)}")
                 enriched_context["missing_apis"].append("hotels")
         
-        # Only fetch events if user asked for them
-        if intent["events"]:
+        # Events: fetch for itinerary or explicit events request
+        if is_itinerary or intent.get("events", False):
             try:
                 events = await self.events_service.search_events(
                     travel_info["destination"],

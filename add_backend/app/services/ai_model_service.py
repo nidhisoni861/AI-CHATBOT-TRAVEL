@@ -480,10 +480,15 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         request.message, request.api_context
     )
     
-    logger.info("[API CONTEXT BUILT] %s", json.dumps(enriched_api_context, default=str))
-    logger.info("[USED API] %s", enriched_api_context.get("used_apis", []))
+    logger.info("[ENRICHED API CONTEXT] %s", json.dumps(enriched_api_context, indent=2, default=str))
+    logger.info("[USED APIS] %s", enriched_api_context.get("used_apis", []))
     
     logger.info("[GTR AFTER API CONTEXT]")
+    
+    # Direct weather response bypass
+    if backend_intent == "weather_query":
+        logger.info("[WEATHER DIRECT RESPONSE] Bypassing model for weather query")
+        return _build_direct_weather_response(request, enriched_api_context)
     
     # Use mock mode if enabled
     if MOCK_MODEL:
@@ -493,9 +498,18 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     # Real model generation
     config = AdapterConfig.from_env()
+    generation_tokens = request.max_new_tokens or safe_max_new_tokens(request.max_new_tokens, request.message)
+    
+    # Force minimum tokens for itinerary to prevent truncation
+    if backend_intent == "itinerary_generation":
+        generation_tokens = max(generation_tokens, 1500)
+        logger.info("[GENERATION TOKENS] %s (forced minimum for itinerary)", generation_tokens)
+    else:
+        logger.info("[GENERATION TOKENS] %s", generation_tokens)
+    
     config = replace(
         config,
-        model_max_new_tokens=safe_max_new_tokens(request.max_new_tokens, request.message),
+        model_max_new_tokens=generation_tokens,
     )
     
     logger.info("[GTR AFTER MODEL LOAD]")
@@ -504,6 +518,8 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     prompt = _build_prompt(request.message, enriched_api_context, backend_intent)
     raw_text = generate_text(tokenizer, model, prompt, config)
     
+    logger.info("[RAW MODEL OUTPUT LENGTH] %s", len(raw_text or ""))
+    logger.info("[RAW MODEL OUTPUT ENDS WITH] %s", (raw_text or "")[-200:])
     logger.info("[GTR RAW OUTPUT] %s", raw_text)
     
     # Log raw model output if requested
@@ -709,6 +725,69 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     )
 
 
+def _build_direct_weather_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
+    """Build direct weather response bypassing model"""
+    logger.info("[BUILD DIRECT WEATHER RESPONSE] Building deterministic weather response")
+    
+    # Extract location from message or use default
+    location = "requested location"
+    if "stuttgart" in request.message.lower():
+        location = "Stuttgart"
+    elif "heidelberg" in request.message.lower():
+        location = "Heidelberg"
+    elif "berlin" in request.message.lower():
+        location = "Berlin"
+    elif "munich" in request.message.lower():
+        location = "Munich"
+    
+    # Get weather data from enriched context
+    weather_data = enriched_api_context.get("weather")
+    weather_status = "available" if weather_data else "unavailable"
+    
+    # Build response kwargs
+    response_kwargs = {}
+    if request.include_raw_model_output:
+        response_kwargs["raw_model_output"] = "Direct weather response (no model generation)"
+    
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=request.model_variant,
+        adapter_loaded=request.model_variant == "fine_tuned",
+        parse_success=True,
+        fallback_used=False,
+        retry_used=False,
+        assistant_message=f"Here is current weather information for {location}.",
+        dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
+            "intent": "weather_query",
+            "weather": {
+                "data": weather_data,
+                "source": "live_api",
+                "status": weather_status
+            },
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_weather"],
+            "api_grounding": {
+                "used_api": enriched_api_context.get("used_apis", []),
+                "missing_api": enriched_api_context.get("missing_apis", []),
+                "warnings": enriched_api_context.get("warnings", [])
+            }
+        },
+        **response_kwargs,
+    )
+
+
 def build_static_fallback_from_context(request: ChatRequest, backend_intent: str, api_context: dict) -> dict:
     """Build static fallback response based on backend intent and API context"""
     travel_info = api_context.get("travel_info", {})
@@ -717,45 +796,51 @@ def build_static_fallback_from_context(request: ChatRequest, backend_intent: str
     duration = travel_info.get("duration_days", 3)
     
     if backend_intent == "itinerary_generation":
+        # Build static fallback with preserved live API data
+        fallback_payload = {
+            "schema_version": "travel_dashboard_v1",
+            "intent": "itinerary_generation",
+            "trip_summary": {
+                "origin": origin,
+                "destination": destination,
+                "duration_days": duration,
+                "budget": "budget",
+                "currency": "EUR",
+                "source": "backend_extraction"
+            },
+            "itinerary": [
+                {"day":1,"time":"Morning","activity":f"Travel from {origin} to {destination} and explore Old Town.","budget_eur":10},
+                {"day":1,"time":"Afternoon","activity":f"Visit {destination} Castle area and viewpoints.","budget_eur":10},
+                {"day":1,"time":"Evening","activity":"Budget dinner in city center.","budget_eur":15},
+                {"day":2,"time":"Morning","activity":"Walk along Philosophenweg.","budget_eur":0},
+                {"day":2,"time":"Afternoon","activity":"Explore Neckar river area and local neighborhoods.","budget_eur":5},
+                {"day":3,"time":"Morning","activity":"Visit free or low-cost museums or university area.","budget_eur":10}
+            ],
+            "food_recommendations": [
+                {"name":"Local Bakery","type":"food","price_range":"low","source":"static_fallback","rating":None},
+                {"name":"Traditional Café","type":"food","price_range":"low","source":"static_fallback","rating":None}
+            ],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+            "api_grounding": {
+                "used_api": api_context.get("used_apis", []),
+                "missing_api": [],
+                "warnings": ["Model parsing failed, using static fallback"]
+            }
+        }
+        
+        # Merge live API data into fallback
+        fallback_payload = merge_live_api_context_into_dashboard(fallback_payload, api_context, backend_intent)
+        
         return {
             "assistant_message": f"Here is a {duration}-day budget trip plan from {origin} to {destination}.",
-            "dashboard_payload": {
-                "schema_version": "travel_dashboard_v1",
-                "intent": "itinerary_generation",
-                "trip_summary": {
-                    "origin": origin,
-                    "destination": destination,
-                    "duration_days": duration,
-                    "budget": "budget",
-                    "currency": "EUR",
-                    "source": "backend_extraction"
-                },
-                "itinerary": [
-                    {"day":1,"time":"Morning","activity":f"Travel from {origin} to {destination} and explore Old Town.","budget_eur":10},
-                    {"day":1,"time":"Afternoon","activity":f"Visit {destination} Castle area and viewpoints.","budget_eur":10},
-                    {"day":1,"time":"Evening","activity":"Budget dinner in city center.","budget_eur":15},
-                    {"day":2,"time":"Morning","activity":"Walk along Philosophenweg.","budget_eur":0},
-                    {"day":2,"time":"Afternoon","activity":"Explore Neckar river area and local neighborhoods.","budget_eur":5},
-                    {"day":3,"time":"Morning","activity":"Visit free or low-cost museums or university area.","budget_eur":10}
-                ],
-                "food_recommendations": [
-                    {"name":"Local Bakery","type":"food","price_range":"low","source":"static_fallback","rating":None},
-                    {"name":"Traditional Café","type":"food","price_range":"low","source":"static_fallback","rating":None}
-                ],
-                "budget_breakdown": {
-                    "currency": "EUR",
-                    "transport": None,
-                    "intercity_transport": None,
-                    "total_known_cost": 0,
-                    "note": None
-                },
-                "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
-                "api_grounding": {
-                    "used_api": api_context.get("used_apis", []),
-                    "missing_api": [],
-                    "warnings": ["Model parsing failed, using static fallback"]
-                }
-            }
+            "dashboard_payload": fallback_payload
         }
     elif backend_intent == "weather_query":
         location = "requested location"
@@ -1346,23 +1431,19 @@ def _build_prompt(message: str, api_context: dict[str, Any], backend_intent: str
             available_apis.append("events")
 
         return (
-            "You are Wanderly, a travel planning assistant. Output ONE compact JSON object with a complete travel itinerary.\n"
+            "You are Wanderly. Output ONE compact JSON object. No markdown. Start with { end with }.\n"
             f"USER: {message}\n"
             f"DETECTED INTENT: {backend_intent}\n"
             f"LIVE API CONTEXT: {api_summary}\n"
             f"AVAILABLE APIS: {', '.join(available_apis) if available_apis else 'None'}\n"
-            "IMPORTANT: Use the provided live_api_context. Do not say no live API data was provided if api_context contains data.\n"
             "Rules:\n"
             f"- Max itinerary items: {max_items}\n"
-            "- Max food_recommendations: 3\n"
-            "- Create realistic, specific activities with budget estimates\n"
-            "- food_recommendations must be actual food venues (restaurants, cafes, bakeries)\n"
-            "- Include trip_summary with extracted origin, destination, duration\n"
-            "- Create a budget_breakdown with realistic costs\n"
-            "- If live API data is available, incorporate it into the response\n"
-            "- Do NOT say 'no live API data was provided' if API context contains actual data\n"
+            "- Max food_recommendations: 2\n"
+            "- Keep activities concise and realistic\n"
+            "- Use live API data if available\n"
+            "- Complete all JSON braces and quotes\n"
             "You must output EXACTLY this JSON structure:\n"
-            '{"assistant_message":"Here is a complete travel plan for your requested trip with itinerary and recommendations.",'
+            '{"assistant_message":"Here is your travel plan with itinerary and recommendations.",'
             '"dashboard_payload":{'
             f'"intent":"{backend_intent}",'
             '"trip_summary":{"destination":"...","duration_days":N,"travelers":"...","budget":"...","origin":"..."},'
@@ -1376,7 +1457,7 @@ def _build_prompt(message: str, api_context: dict[str, Any], backend_intent: str
             '"dashboard_actions":["show_trip_summary","show_itinerary","show_budget"],'
             '"api_grounding":{"used_api":[...successful_apis...],"missing_api":[...missing_apis...],"warnings":[]}'
             "}}\n"
-            f"Live API data is available for: {', '.join(available_apis) if available_apis else 'no APIs - create content from context'}\n"
+            f"APIs available: {', '.join(available_apis) if available_apis else 'None'}\n"
         )
     else:
         # Default fallback for other intents
