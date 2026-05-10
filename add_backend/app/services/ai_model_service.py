@@ -2287,7 +2287,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         flights_list = fallback_flights
     
     if request.include_raw_model_output:
-        response_kwargs["raw_model_output"] = raw_output
+        response_kwargs["raw_model_output"] = f"Direct flight response: budget transport={transport_cost}"
     
     # Build payload first, then calculate budget
     payload = {
@@ -2316,25 +2316,13 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         }
     }
     
-    # Direct flight budget calculation
-    def _flight_price_to_number(value):
-        if value is None:
-            return 0
-        if isinstance(value, (int, float)):
-            return int(value)
-        if not isinstance(value, str):
-            return 0
-        numbers = re.findall(r"\d+", value)
-        if not numbers:
-            return 0
-        return int(numbers[0])
-
     flight_prices = []
-    for f in flights_list:
-        if isinstance(f, dict):
-            price_num = _flight_price_to_number(f.get("price"))
-            if price_num > 0:
-                flight_prices.append(price_num)
+    for flight in flights_list:
+        if isinstance(flight, dict):
+            price_text = str(flight.get("price", ""))
+            numbers = re.findall(r"\d+", price_text)
+            if numbers:
+                flight_prices.append(int(numbers[0]))
 
     transport_cost = min(flight_prices) if flight_prices else 0
 
@@ -2356,7 +2344,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
 
     logger.info("[DIRECT FLIGHT PRICE VALUES] %s", [f.get("price") for f in flights_list if isinstance(f, dict)])
     logger.info("[DIRECT FLIGHT PRICE NUMBERS] %s", flight_prices)
-    logger.info("[DIRECT FLIGHT BUDGET] %s", flight_budget_breakdown)
+    logger.info("[DIRECT FLIGHT TRANSPORT COST] %s", transport_cost)
 
     payload["budget_breakdown"] = flight_budget_breakdown
     
