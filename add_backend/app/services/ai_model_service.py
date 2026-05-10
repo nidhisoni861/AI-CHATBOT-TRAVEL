@@ -1197,6 +1197,24 @@ CITY_ALIASES = {
 }
 
 
+def normalize_flights_result(flight_result):
+    """Normalize flight service response to consistent list format"""
+    if not flight_result:
+        return []
+    
+    if isinstance(flight_result, list):
+        return flight_result
+    
+    if isinstance(flight_result, dict):
+        data = flight_result.get("data")
+        if isinstance(data, list):
+            return data
+        if data:
+            return [data]
+    
+    return []
+
+
 async def _build_direct_flight_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
     """Build direct flight response bypassing model"""
     logger.info("[FLIGHT DIRECT RESPONSE]")
@@ -1232,22 +1250,32 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     logger.info("[FLIGHT SEARCH ORIGIN] %s", origin)
     logger.info("[FLIGHT SEARCH DESTINATION] %s", destination)
     
-    # Extract flight data from enriched context
-    flights_data = None
-    if "flights" in enriched_api_context:
-        flights_data = enriched_api_context["flights"]
-    elif "flight_data" in enriched_api_context:
-        flights_data = enriched_api_context["flight_data"]
-    elif "dashboard_payload" in enriched_api_context:
-        dashboard = enriched_api_context["dashboard_payload"]
-        if "flights" in dashboard:
-            flights_section = dashboard["flights"]
-            if isinstance(flights_section, dict) and "data" in flights_section:
-                flights_data = flights_section["data"]
-            else:
-                flights_data = flights_section
+    # Call flight service directly for live data
+    from add_backend.app.services.flight_service import FlightService
+    flight_service = FlightService()
     
-    logger.info("[FLIGHT DATA] %s", flights_data)
+    # Add date fallbacks
+    departure_date = travel_info.get("departure_date") or "14/10/2026"
+    return_date = travel_info.get("return_date") or "17/10/2026"
+    
+    logger.info("[CHAT FLIGHT DEPARTURE DATE] %s", departure_date)
+    logger.info("[CHAT FLIGHT RETURN DATE] %s", return_date)
+    
+    # Call flight service
+    try:
+        flight_result = await flight_service.search_flights(
+            origin=origin,
+            destination=destination,
+            departure_date=departure_date,
+            return_date=return_date
+        )
+        logger.info("[CHAT FLIGHT RAW SERVICE RESULT] %s", flight_result)
+        flights_list = normalize_flights_result(flight_result)
+        logger.info("[CHAT FLIGHT NORMALIZED LIST] %s", flights_list)
+    except Exception as e:
+        logger.error("[CHAT FLIGHT SERVICE ERROR] %s", str(e))
+        flight_result = None
+        flights_list = []
     
     response_kwargs = {}
     if request.include_raw_model_output:
@@ -1295,12 +1323,14 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
             **response_kwargs,
         )
     
-    # Build response with flight data
-    flights_list = flights_data if isinstance(flights_data, list) else []
+    # Build response with live flight data
     flights_status = "available" if flights_list else "unavailable"
     used_apis = ["flights"] if flights_list else []
     missing_apis = [] if flights_list else ["flights"]
     warnings = [] if flights_list else ["No flights found or flight API unavailable."]
+    
+    if request.include_raw_model_output:
+        response_kwargs["raw_model_output"] = "Direct flight response: live flight data available" if flights_list else "Direct flight response: no flights found"
     
     return ChatResponse(
         session_id=request.session_id,
@@ -1309,7 +1339,7 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
         parse_success=True,
         fallback_used=False,
         retry_used=False,
-        assistant_message=f"Here are available flight options from {origin} to {destination}.",
+        assistant_message=f"Here are available flight options from {origin} to {destination}." if flights_list else f"No flights found from {origin} to {destination}.",
         dashboard_payload={
             "schema_version": "travel_dashboard_v1",
             "intent": "flight_search",

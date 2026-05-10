@@ -324,13 +324,23 @@ class ApiContextService:
                         travel_info["departure_date"],
                         travel_info["return_date"]
                     )
-                    if flights:
-                        enriched_context["flights"] = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
-                        enriched_context["used_apis"].append("flights")
-                        logger.info("[FLIGHT DATA] %s flights found", len(flights))
+                    # Normalize flight service response
+                    if isinstance(flights, list):
+                        flight_list = [flight.dict() if hasattr(flight, 'dict') else flight for flight in flights]
+                    elif isinstance(flights, dict) and "data" in flights:
+                        flight_data = flights["data"]
+                        if isinstance(flight_data, list):
+                            flight_list = flight_data
+                        elif flight_data:
+                            flight_list = [flight_data]
+                        else:
+                            flight_list = []
                     else:
-                        enriched_context["warnings"].append("No flights found or API unavailable")
-                        enriched_context["missing_apis"].append("flights")
+                        flight_list = []
+                    
+                    enriched_context["flights"] = flight_list
+                    enriched_context["used_apis"].append("flights")
+                    logger.info("[FLIGHT DATA] %s flights found", len(flight_list))
                 except Exception as e:
                     enriched_context["warnings"].append(f"Flight service error: {str(e)}")
                     enriched_context["missing_apis"].append("flights")
