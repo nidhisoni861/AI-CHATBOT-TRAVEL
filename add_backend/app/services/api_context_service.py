@@ -210,27 +210,20 @@ class ApiContextService:
         hotel_detected = any(keyword in message_lower for keyword in hotel_keywords)
         events_detected = any(keyword in message_lower for keyword in events_keywords)
         
-        # Priority: itinerary > weather > flight > hotel > events
+        # Priority: itinerary_generation > weather_query > flight_search > hotel_search > events_search
         if itinerary_detected:
             intent["itinerary_generation"] = True
-        if weather_detected:
-            intent["weather"] = True
-        if flight_detected and not itinerary_detected:  # Only flight if not itinerary
-            intent["flights"] = True
-        if hotel_detected:
-            intent["hotels"] = True
-        if events_detected:
-            intent["events"] = True
-        
-        # Only set hotels intent if explicitly requested AND no other higher priority intent detected
-        if hotel_detected and not weather_detected and not flight_detected and not events_detected:
-            intent["hotels"] = True
+        elif weather_detected:
+            intent["weather_query"] = True
+        elif flight_detected:
+            intent["flight_search"] = True
+        elif hotel_detected:
+            intent["hotel_search"] = True
+        elif events_detected:
+            intent["events_search"] = True
         else:
-            intent["hotels"] = False
-        
-        # Special case: if no specific intent detected, assume general travel (flights)
-        if not any(intent.values()):
-            intent["flights"] = True
+            # Default fallback
+            intent["itinerary_generation"] = True
             
         return intent
 

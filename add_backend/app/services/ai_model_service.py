@@ -484,6 +484,8 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         )
         logger.info("Enriched api_context with live API data")
     
+    logger.info("[GTR AFTER API CONTEXT]")
+    
     # Use mock mode if enabled
     if MOCK_MODEL:
         logger.info("Using mock model mode for local testing")
@@ -497,14 +499,54 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         model_max_new_tokens=safe_max_new_tokens(request.max_new_tokens, request.message),
     )
     
+    logger.info("[GTR AFTER MODEL LOAD]")
     logger.info("Generating response with model_variant=%s", request.model_variant)
     tokenizer, model = _get_model(request.model_variant, config)
     prompt = _build_prompt(request.message, enriched_api_context)
     raw_text = generate_text(tokenizer, model, prompt, config)
     
+    logger.info("[GTR RAW OUTPUT] %s", raw_text)
+    
     # Log raw model output if requested
     if request.include_raw_model_output:
         logger.info(f"[RAW MODEL OUTPUT] {raw_text}")
+
+    # Check for empty model output
+    if not raw_text or raw_text.strip() == "":
+        logger.warning("[GTR EMPTY OUTPUT] Model generated empty response")
+        selected_model = request.model_variant or getattr(request, "selected_model", "base")
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=selected_model,
+            adapter_loaded=selected_model == "fine_tuned",
+            parse_success=False,
+            fallback_used=True,
+            retry_used=False,
+            assistant_message="Model generated an empty response.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "error",
+                "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_error"],
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": [],
+                    "warnings": ["Model generated empty response"]
+                }
+            }
+        )
 
     parse_success = False
     fallback_used = False
@@ -516,6 +558,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         normalized = safe_parse_and_normalize(raw_text, enriched_api_context, request.message)
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
         parse_success = True
+        logger.info("[GTR AFTER NORMALIZE]")
     except Exception as exc:
         # Log the actual validation error for debugging
         logger.error(f"[AI MODEL VALIDATION ERROR] {str(exc)}")
@@ -599,6 +642,61 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     # Final intent-based response cleanup
     normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
+    
+    logger.info("[GTR AFTER SANITIZE]")
+
+    logger.info("[GTR RETURN] returning ChatResponse")
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=request.model_variant,
+        adapter_loaded=request.model_variant == "fine_tuned",
+        parse_success=parse_success,
+        fallback_used=fallback_used,
+        retry_used=retry_used,
+        assistant_message=normalized["assistant_message"],
+        dashboard_payload=normalized["dashboard_payload"],
+        **raw_kwargs,
+    )
+
+    # FINAL FALLBACK: This should never be reached, but if it is, return a valid response
+    selected_model = request.model_variant or getattr(request, "selected_model", "base")
+    adapter_loaded = selected_model == "fine_tuned"
+
+    logger.error("[GTR FINAL FALLBACK] reached end of generate_travel_response without return")
+
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=selected_model,
+        adapter_loaded=adapter_loaded,
+        parse_success=False,
+        fallback_used=True,
+        retry_used=False,
+        assistant_message="generate_travel_response reached final fallback.",
+        dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
+            "intent": "error",
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_error"],
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": [],
+                "warnings": ["generate_travel_response reached final fallback"]
+            }
+        }
+    )
+
 
 def enforce_intent_specific_dashboard(payload: dict) -> dict:
     """
