@@ -1652,10 +1652,11 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
 
 def parse_price_number(value, default=0):
     """
-    Convert price strings like:
+    Convert price strings:
     "$250-350" -> 250
+    "$120-200" -> 120
     "€25" -> 25
-    "€5-10" -> 5
+    "€10-20" -> 10
     30 -> 30
     None -> default
     """
@@ -1668,7 +1669,6 @@ def parse_price_number(value, default=0):
     if not isinstance(value, str):
         return default
 
-    import re
     numbers = re.findall(r"\d+", value)
     if not numbers:
         return default
@@ -1702,9 +1702,11 @@ def calculate_budget_breakdown(payload: dict) -> dict:
         flight_prices = []
         for flight in flights_data:
             if isinstance(flight, dict):
-                flight_prices.append(parse_price_number(flight.get("price"), 0))
+                price = parse_price_number(flight.get("price"), 0)
+                if price > 0:
+                    flight_prices.append(price)
 
-        transport = min([p for p in flight_prices if p > 0], default=0)
+        transport = min(flight_prices) if flight_prices else 0
         note = "Budget is estimated from available flight data."
 
     elif intent == "hotel_search":
@@ -1780,25 +1782,43 @@ def calculate_budget_breakdown(payload: dict) -> dict:
         # Weather-only: zero budget
         note = "No budget calculation for weather queries."
 
-    # 5. Total calculation
-    total_known_cost = transport + accommodation + food + activities
-    remaining_budget = total_budget - total_known_cost
+    # 5. Return based on intent
+    if intent == "flight_search":
+        return {
+            "currency": "EUR",
+            "transport": transport,
+            "food": 0,
+            "activities": 0,
+            "accommodation": 0,
+            "intercity_transport": transport,
+            "total_known_cost": transport,
+            "total": transport,
+            "remaining_budget": 500 - transport,
+            "remaining_budget_before_transport_and_accommodation": 500,
+            "within_budget": (500 - transport) >= 0,
+            "note": "Budget is estimated from available flight data.",
+            "source": "backend_budget_calculation"
+        }
+    else:
+        # Standard calculation for other intents
+        total_known_cost = transport + accommodation + food + activities
+        remaining_budget = total_budget - total_known_cost
 
-    return {
-        "currency": trip_summary.get("currency") or "EUR",
-        "transport": transport,
-        "food": food,
-        "activities": activities,
-        "accommodation": accommodation,
-        "intercity_transport": transport,
-        "total_known_cost": total_known_cost,
-        "total": total_known_cost,
-        "remaining_budget": remaining_budget,
-        "remaining_budget_before_transport_and_accommodation": total_budget - food - activities,
-        "within_budget": remaining_budget >= 0,
-        "note": note,
-        "source": "backend_budget_calculation"
-    }
+        return {
+            "currency": trip_summary.get("currency") or "EUR",
+            "transport": transport,
+            "food": food,
+            "activities": activities,
+            "accommodation": accommodation,
+            "intercity_transport": transport,
+            "total_known_cost": total_known_cost,
+            "total": total_known_cost,
+            "remaining_budget": remaining_budget,
+            "remaining_budget_before_transport_and_accommodation": total_budget - food - activities,
+            "within_budget": remaining_budget >= 0,
+            "note": note,
+            "source": "backend_budget_calculation"
+        }
 
 
 def itinerary_has_required_days(payload: dict, duration_days: int) -> bool:
@@ -2298,6 +2318,10 @@ async def _build_direct_flight_response(request: ChatRequest, enriched_api_conte
     
     # Calculate budget breakdown for flight search
     payload["budget_breakdown"] = calculate_budget_breakdown(payload)
+    
+    # Add temporary log for verification
+    logger.info("[FLIGHT BUDGET INPUT FLIGHTS] %s", flights_list)
+    logger.info("[FLIGHT BUDGET OUTPUT] %s", payload["budget_breakdown"])
     
     return ChatResponse(
         session_id=request.session_id,
