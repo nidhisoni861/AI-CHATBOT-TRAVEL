@@ -553,79 +553,40 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     first_raw_text = raw_text
     retry_raw_text: str | None = None
 
+    normalized = None
     try:
         normalized = safe_parse_and_normalize(raw_text, enriched_api_context, request.message)
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
         parse_success = True
         logger.info("[GTR AFTER NORMALIZE]")
+        logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
     except Exception as exc:
         # Log the actual validation error for debugging
         logger.error(f"[AI MODEL VALIDATION ERROR] {str(exc)}")
         logger.error(f"[RAW MODEL OUTPUT] {raw_text}")
         logger.error(f"[ENRICHED API CONTEXT] {json.dumps(enriched_api_context, indent=2)}")
         
-        # Try to validate with Pydantic to get specific error details
-        try:
-            from pydantic import ValidationError
-            # Create a temporary dashboard payload model to validate
-            temp_payload = normalized.get("dashboard_payload", {})
-            validated = ModelDashboardResponse.model_validate(temp_payload)
-            logger.info(f"[PYDANTIC VALIDATION SUCCESS] Payload validated successfully")
-            parse_success = True
-            fallback_used = False
-        except ValidationError as validation_exc:
-            logger.error(f"[DASHBOARD VALIDATION ERROR] {json.dumps(validation_exc.errors(), indent=2)}")
-            logger.error(f"[FAILED DASHBOARD PAYLOAD] {json.dumps(temp_payload, indent=2, default=str)}")
-            
-            # Build error response with actual validation details
-            parse_success = False
-            fallback_used = True
-            
-            # Extract specific field errors from validation
-            error_details = []
-            if hasattr(validation_exc, 'errors') and validation_exc.errors:
-                for error in validation_exc.errors:
-                    field_path = " -> ".join(str(loc) for loc in error.get('loc', []))
-                    error_msg = f"Field '{error.get('type', 'unknown')}' at {field_path}: {error.get('msg', 'Unknown error')}"
-                    error_details.append(error_msg)
-            
-            error_message = f"Response validation failed: {'; '.join(error_details) if error_details else 'Unknown validation error'}"
-            
-            normalized = build_safe_fallback_response(error_message)
-        err_str = str(exc)
-        if any(marker in err_str for marker in _INCOMPLETE_JSON_ERRORS):
-            logger.warning("First generation incomplete (%s), retrying with compact prompt", exc)
-            retry_prompt = _build_retry_prompt(request.message, enriched_api_context)
-            retry_raw_text = generate_text(tokenizer, model, retry_prompt, config)
-            retry_used = True
-            try:
-                normalized = safe_parse_and_normalize(retry_raw_text, enriched_api_context, request.message)
-                normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
-                normalized["dashboard_payload"]["api_grounding"].setdefault("warnings", []).append(
-                    "Compact retry was used — first response was incomplete JSON."
-                )
-                parse_success = True
-            except Exception as exc2:
-                logger.warning("Retry also failed: %s", exc2)
-                normalized = build_safe_fallback_response(
-                    warning=f"Both attempts could not be parsed: {str(exc2)}"
-                )
-                fallback_used = True
-        else:
-            logger.warning("Model output could not be safely parsed: %s", exc)
-            normalized = build_safe_fallback_response(
-                warning=f"Model output could not be safely parsed: {str(exc)}"
-            )
-            fallback_used = True
-
-    final_raw = retry_raw_text if retry_used else first_raw_text
-    raw_kwargs: dict[str, Any] = {}
-    if request.include_raw_model_output and DEBUG_RAW_OUTPUT:
-        raw_kwargs = {
-            "raw_model_output": final_raw,
-            "first_raw_model_output": first_raw_text,
-            "retry_raw_model_output": retry_raw_text,
+        # Build static fallback based on backend intent
+        normalized = build_static_fallback_from_context(
+            request=request,
+            backend_intent=backend_intent,
+            api_context=enriched_api_context
+        )
+        parse_success = False
+        fallback_used = True
+        logger.info("[STATIC FALLBACK BUILT] due to model parsing failure")
+    
+    # Guard: ensure normalized exists and has dashboard_payload
+    if normalized is None or "dashboard_payload" not in normalized or normalized["dashboard_payload"] is None:
+        logger.warning("[NORMALIZED GUARD] Building default dashboard payload")
+        normalized = {
+            "assistant_message": "Building response...",
+            "dashboard_payload": build_default_dashboard_payload(backend_intent)
         }
+    
+    logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
+    logger.info("[API CONTEXT RAW] %s", json.dumps(enriched_api_context, indent=2, default=str))
+
     # Set assistant_message_source based on model variant
     assistant_message_source = "mock_model"
     if not MOCK_MODEL:
@@ -643,6 +604,17 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     normalized["dashboard_payload"]["intent"] = backend_intent
     logger.info("[FINAL INTENT AFTER OVERRIDE] %s", backend_intent)
     
+    # Merge live API context into dashboard payload
+    normalized["dashboard_payload"] = merge_live_api_context_into_dashboard(
+        normalized["dashboard_payload"],
+        enriched_api_context,
+        backend_intent
+    )
+    
+    logger.info("[MERGED WEATHER] %s", normalized["dashboard_payload"].get("weather"))
+    logger.info("[FINAL USED API] %s", normalized["dashboard_payload"].get("api_grounding", {}).get("used_api"))
+    logger.info("[FINAL INTENT] %s", normalized["dashboard_payload"].get("intent"))
+    
     # Update assistant_message based on backend intent
     if backend_intent == "weather_query":
         # Extract location from message or use default
@@ -656,21 +628,21 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         elif "munich" in request.message.lower():
             location = "Munich"
         
-        normalized["assistant_message"] = f"Here is the current weather information for {location}."
+        normalized["assistant_message"] = f"Here is current weather information for {location}."
     elif backend_intent == "itinerary_generation":
         # Extract travel info
         travel_info = enriched_api_context.get("travel_info", {})
         origin = travel_info.get("origin", "Stuttgart")
         destination = travel_info.get("destination", "Heidelberg")
-        duration = travel_info.get("duration_days", 3)
+        duration = travel_info.get("duration_days",3)
         
         normalized["assistant_message"] = f"Here is a {duration}-day budget trip plan from {origin} to {destination}."
     elif backend_intent == "flight_search":
-        normalized["assistant_message"] = "Here are the available flight options for your requested route."
+        normalized["assistant_message"] = "Here are available flight options for your requested route."
     elif backend_intent == "hotel_search":
-        normalized["assistant_message"] = "Here are the available hotel options for your requested destination."
+        normalized["assistant_message"] = "Here are available hotel options for your requested destination."
     elif backend_intent == "events_search":
-        normalized["assistant_message"] = "Here are the available events and activities for your requested location."
+        normalized["assistant_message"] = "Here are available events and activities for your requested location."
     
     # Final intent-based response cleanup using backend intent
     normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
@@ -728,6 +700,259 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
             }
         }
     )
+
+
+def build_static_fallback_from_context(request: ChatRequest, backend_intent: str, api_context: dict) -> dict:
+    """Build static fallback response based on backend intent and API context"""
+    travel_info = api_context.get("travel_info", {})
+    origin = travel_info.get("origin", "Stuttgart")
+    destination = travel_info.get("destination", "Heidelberg")
+    duration = travel_info.get("duration_days", 3)
+    
+    if backend_intent == "itinerary_generation":
+        return {
+            "assistant_message": f"Here is a {duration}-day budget trip plan from {origin} to {destination}.",
+            "dashboard_payload": {
+                "schema_version": "travel_dashboard_v1",
+                "intent": "itinerary_generation",
+                "trip_summary": {
+                    "origin": origin,
+                    "destination": destination,
+                    "duration_days": duration,
+                    "budget": "budget",
+                    "currency": "EUR",
+                    "source": "backend_extraction"
+                },
+                "itinerary": [
+                    {"day":1,"time":"Morning","activity":f"Travel from {origin} to {destination} and explore Old Town.","budget_eur":10},
+                    {"day":1,"time":"Afternoon","activity":f"Visit {destination} Castle area and viewpoints.","budget_eur":10},
+                    {"day":1,"time":"Evening","activity":"Budget dinner in city center.","budget_eur":15},
+                    {"day":2,"time":"Morning","activity":"Walk along Philosophenweg.","budget_eur":0},
+                    {"day":2,"time":"Afternoon","activity":"Explore Neckar river area and local neighborhoods.","budget_eur":5},
+                    {"day":3,"time":"Morning","activity":"Visit free or low-cost museums or university area.","budget_eur":10}
+                ],
+                "food_recommendations": [
+                    {"name":"Local Bakery","type":"food","price_range":"low","source":"static_fallback","rating":None},
+                    {"name":"Traditional Café","type":"food","price_range":"low","source":"static_fallback","rating":None}
+                ],
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+                "api_grounding": {
+                    "used_api": api_context.get("used_apis", []),
+                    "missing_api": [],
+                    "warnings": ["Model parsing failed, using static fallback"]
+                }
+            }
+        }
+    elif backend_intent == "weather_query":
+        location = "requested location"
+        if "stuttgart" in request.message.lower():
+            location = "Stuttgart"
+        elif "heidelberg" in request.message.lower():
+            location = "Heidelberg"
+        
+        return {
+            "assistant_message": f"Here is current weather information for {location}.",
+            "dashboard_payload": {
+                "schema_version": "travel_dashboard_v1",
+                "intent": "weather_query",
+                "weather": api_context.get("weather", {"data": None, "source": "live_api", "status": "unavailable"}),
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_weather"],
+                "api_grounding": {
+                    "used_api": api_context.get("used_apis", []),
+                    "missing_api": [],
+                    "warnings": ["Model parsing failed, using static fallback"]
+                }
+            }
+        }
+    else:
+        # Default fallback
+        return {
+            "assistant_message": "I encountered an error processing your request.",
+            "dashboard_payload": {
+                "schema_version": "travel_dashboard_v1",
+                "intent": "error",
+                "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_error"],
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": [],
+                    "warnings": ["Model parsing failed"]
+                }
+            }
+        }
+
+
+def build_default_dashboard_payload(backend_intent: str) -> dict:
+    """Build default dashboard payload for given intent"""
+    if backend_intent == "weather_query":
+        return {
+            "schema_version": "travel_dashboard_v1",
+            "intent": "weather_query",
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_weather"],
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": [],
+                "warnings": []
+            }
+        }
+    elif backend_intent == "itinerary_generation":
+        return {
+            "schema_version": "travel_dashboard_v1",
+            "intent": "itinerary_generation",
+            "trip_summary": {},
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": [],
+                "warnings": []
+            }
+        }
+    else:
+        return {
+            "schema_version": "travel_dashboard_v1",
+            "intent": "error",
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_error"],
+            "api_grounding": {
+                "used_api": [],
+                "missing_api": [],
+                "warnings": []
+            }
+        }
+
+
+def merge_live_api_context_into_dashboard(payload: dict, api_context: dict, backend_intent: str) -> dict:
+    """Merge live API context into dashboard payload"""
+    # Weather merge
+    weather_data = api_context.get("weather") or api_context.get("weather_data")
+    if weather_data:
+        payload["weather"] = {
+            "data": weather_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        payload["weather"] = {
+            "data": None,
+            "source": "live_api",
+            "status": "unavailable"
+        }
+    
+    # Flights merge
+    flights_data = api_context.get("flights") or api_context.get("flight_data")
+    if flights_data:
+        payload["flights"] = {
+            "data": flights_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        payload["flights"] = {
+            "data": [],
+            "source": "live_api",
+            "status": "unavailable"
+        }
+    
+    # Hotels merge
+    hotels_data = api_context.get("hotels") or api_context.get("hotel_data")
+    if hotels_data:
+        payload["hotels"] = {
+            "data": hotels_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        payload["hotels"] = {
+            "data": [],
+            "source": "live_api",
+            "status": "unavailable"
+        }
+    
+    # Events merge
+    events_data = api_context.get("local_events") or api_context.get("events") or api_context.get("events_data")
+    if events_data:
+        payload["local_events"] = {
+            "data": events_data,
+            "source": "live_api",
+            "status": "available"
+        }
+    else:
+        payload["local_events"] = {
+            "data": [],
+            "source": "live_api",
+            "status": "unavailable"
+        }
+    
+    return payload
 
 
 def detect_user_intent(message: str) -> str:
