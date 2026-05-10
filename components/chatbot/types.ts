@@ -62,6 +62,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   time: string;
+  detectedLang?: string;
   dashboard?: DashboardPayload | null;
   showDashboard?: boolean;
 }
