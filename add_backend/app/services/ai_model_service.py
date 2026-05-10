@@ -17,7 +17,21 @@ from typing import Any, Optional
 DEBUG_RAW_OUTPUT = os.getenv("WANDERLY_DEBUG_RAW_OUTPUT", "false").lower() == "true"
 MOCK_MODEL = os.getenv("WANDERLY_MOCK_MODEL", "false").lower() == "true"
 
+# City aliases for hotel search
+CITY_ALIASES = {
+    "sttugart": "Stuttgart",
+    "stuttgart": "Stuttgart", 
+    "berlin": "Berlin",
+    "munich": "Munich",
+    "münchen": "Munich",
+    "heidelberg": "Heidelberg"
+}
+
 from add_backend.app.models.chat_models import ChatRequest, ChatResponse, ModelVariant
+from add_backend.app.services.hotel_service import HotelService
+
+# Global hotel service instance
+hotel_service = HotelService()
 
 
 logger = logging.getLogger("wanderly.model")
@@ -690,6 +704,11 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     if backend_intent == "flight_search":
         logger.info("[FLIGHT DIRECT RESPONSE] Bypassing model for flight search")
         return await _build_direct_flight_response(request, enriched_api_context)
+    
+    # Direct hotel response handling - bypass model entirely
+    if backend_intent == "hotel_search":
+        logger.info("[HOTEL DIRECT RESPONSE] Bypassing model for hotel search")
+        return await _build_direct_hotel_response(request, enriched_api_context)
     
     # Use mock mode if enabled
     if MOCK_MODEL:
@@ -1480,6 +1499,201 @@ def build_static_fallback_flights(origin, destination, departure_date, return_da
             "flight_number": "EW-4512"
         }
     ]
+
+
+def normalize_hotels_result(hotel_result):
+    """Normalize hotel service result to list format"""
+    if not hotel_result:
+        return []
+    
+    if isinstance(hotel_result, list):
+        return hotel_result
+    
+    if isinstance(hotel_result, dict):
+        data = hotel_result.get("data") or hotel_result.get("hotels")
+        if isinstance(data, list):
+            return data
+        if data:
+            return [data]
+    
+    return []
+
+
+async def _build_direct_hotel_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:
+    """Build direct hotel response bypassing model"""
+    logger.info("[HOTEL DIRECT RESPONSE]")
+    
+    selected_model = request.model_variant or getattr(request, "selected_model", None) or "base"
+    adapter_loaded = selected_model == "fine_tuned"
+    travel_info = enriched_api_context.get("travel_info") or {}
+    
+    # Extract destination with fallbacks
+    destination = travel_info.get("destination")
+    if not destination:
+        # Try to extract from message
+        message_lower = request.message.lower()
+        import re
+        patterns = [
+            r"hotel[s]?\s+(?:in\s+)?([a-z\s]+)",
+            r"find\s+hotel[s]?\s+(?:in\s+)?([a-z\s]+)",
+            r"looking\s+for\s+hotel[s]?\s+(?:in\s+)?([a-z\s]+)"
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                destination = match.group(1).strip()
+                break
+    
+    # Apply city aliases
+    if destination:
+        destination = CITY_ALIASES.get(destination.lower(), destination.title())
+    
+    logger.info("[HOTEL SEARCH DESTINATION] %s", destination)
+    
+    # If destination is still missing, return error response
+    if not destination:
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=selected_model,
+            adapter_loaded=adapter_loaded,
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Please provide destination city for your hotel search.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "hotel_search",
+                "trip_summary": {
+                    "destination": "Unknown",
+                    "source": "backend_extraction"
+                },
+                "flight": None,
+                "stay_recommendations": [],
+                "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {
+                    "data": [],
+                    "source": "live_api",
+                    "status": "unavailable"
+                },
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+                "food_recommendations": [],
+                "itinerary": [],
+                "map_data": {},
+                "budget_breakdown": {
+                    "currency": "EUR",
+                    "transport": None,
+                    "intercity_transport": None,
+                    "total_known_cost": 0,
+                    "note": None
+                },
+                "dashboard_actions": ["show_hotels"],
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": ["hotels"],
+                    "warnings": ["Destination is missing. Please provide destination city."]
+                }
+            }
+        )
+    
+    # Try live hotel service first
+    hotel_result = await hotel_service.search_hotels(
+        destination=destination,
+        check_in=travel_info.get("check_in"),
+        check_out=travel_info.get("check_out"),
+        guests=travel_info.get("guests", 2)
+    )
+    
+    logger.info("[HOTEL RAW SERVICE RESULT] %s", hotel_result)
+    hotels_list = normalize_hotels_result(hotel_result)
+    logger.info("[HOTEL NORMALIZED LIST] %s", hotels_list)
+    
+    if hotels_list:
+        # Use live hotel data
+        hotel_source = "live_api"
+        used_apis = ["hotels"]
+        missing_apis = []
+        warnings = []
+        assistant_message = f"Here are available hotel options in {destination}."
+        raw_model_output = "Direct hotel response: live hotel data available"
+    else:
+        # Create static fallback hotels
+        fallback_hotels = [
+            {
+                "name": "Generator Berlin",
+                "location": destination,
+                "price_per_night": "€25",
+                "rating": 4.4
+            },
+            {
+                "name": "City Circus Hotel",
+                "location": destination,
+                "price_per_night": "€30",
+                "rating": 4.3
+            },
+            {
+                "name": "Hotel Berlin Central",
+                "location": destination,
+                "price_per_night": "€35",
+                "rating": 4.4
+            }
+        ]
+        
+        hotels_list = fallback_hotels
+        hotel_source = "static_fallback"
+        used_apis = []
+        missing_apis = ["hotels"]
+        warnings = ["Live hotel API unavailable; showing static fallback hotel options."]
+        assistant_message = f"Live hotel data is currently unavailable, but here are sample hotel options in {destination}."
+        raw_model_output = "Direct hotel response: static fallback hotels shown because live API returned no data"
+    
+    logger.info("[HOTEL SOURCE] %s", hotel_source)
+    
+    return ChatResponse(
+        session_id=request.session_id,
+        selected_model=selected_model,
+        adapter_loaded=adapter_loaded,
+        parse_success=True,
+        fallback_used=False,
+        retry_used=False,
+        assistant_message=assistant_message,
+        dashboard_payload={
+            "schema_version": "travel_dashboard_v1",
+            "intent": "hotel_search",
+            "trip_summary": {
+                "destination": destination,
+                "source": "backend_extraction"
+            },
+            "flight": None,
+            "stay_recommendations": [],
+            "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+            "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+            "hotels": {
+                "data": hotels_list,
+                "source": hotel_source,
+                "status": "available"
+            },
+            "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
+            "food_recommendations": [],
+            "itinerary": [],
+            "map_data": {},
+            "budget_breakdown": {
+                "currency": "EUR",
+                "transport": None,
+                "intercity_transport": None,
+                "total_known_cost": 0,
+                "note": None
+            },
+            "dashboard_actions": ["show_hotels"],
+            "api_grounding": {
+                "used_api": used_apis,
+                "missing_api": missing_apis,
+                "warnings": warnings
+            }
+        },
+        raw_model_output=raw_model_output
+    )
 
 
 async def _build_direct_flight_response(request: ChatRequest, enriched_api_context: dict) -> ChatResponse:

@@ -377,6 +377,67 @@ class ApiContextService:
                 if "flights" not in enriched_context["missing_apis"]:
                     enriched_context["missing_apis"].append("flights")
                 enriched_context["warnings"].append("Live flight API unavailable; showing static fallback flight options.")
+        
+        # Hotels: fetch for itinerary generation with destination
+        if is_itinerary and travel_info.get("destination"):
+            check_in = travel_info.get("check_in", "2026-05-11")
+            check_out = travel_info.get("check_out", "2026-05-13")
+            guests = travel_info.get("guests", 2)
+
+            hotel_result = await self.hotel_service.search_hotels(
+                destination=travel_info["destination"],
+                check_in=check_in,
+                check_out=check_out,
+                guests=guests
+            )
+
+            # Normalize hotel service response
+            if isinstance(hotel_result, list):
+                hotels_list = [hotel.dict() if hasattr(hotel, 'dict') else hotel for hotel in hotel_result]
+            elif isinstance(hotel_result, dict) and "data" in hotel_result:
+                hotel_data = hotel_result["data"]
+                if isinstance(hotel_data, list):
+                    hotels_list = hotel_data
+                elif hotel_data:
+                    hotels_list = [hotel_data]
+                else:
+                    hotels_list = []
+            else:
+                hotels_list = []
+
+            if hotels_list:
+                enriched_context["hotels"] = hotels_list
+                enriched_context["hotel_source"] = "live_api"
+                if "hotels" not in enriched_context["used_apis"]:
+                    enriched_context["used_apis"].append("hotels")
+            else:
+                # Create static fallback hotels
+                fallback_hotels = [
+                    {
+                        "name": "Generator Berlin",
+                        "location": travel_info["destination"],
+                        "price_per_night": "€25",
+                        "rating": 4.4
+                    },
+                    {
+                        "name": "City Circus Hotel",
+                        "location": travel_info["destination"],
+                        "price_per_night": "€30",
+                        "rating": 4.3
+                    },
+                    {
+                        "name": "Hotel Berlin Central",
+                        "location": travel_info["destination"],
+                        "price_per_night": "€35",
+                        "rating": 4.4
+                    }
+                ]
+                enriched_context["hotels"] = fallback_hotels
+                enriched_context["hotel_source"] = "static_fallback"
+                if "hotels" not in enriched_context["missing_apis"]:
+                    enriched_context["missing_apis"].append("hotels")
+                enriched_context["warnings"].append("Live hotel API unavailable; showing static fallback hotel options.")
+        
         elif intent.get("flights", False):
             # Check if destination is missing
             if not travel_info.get("destination"):
