@@ -1225,10 +1225,9 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         normalized = {
             "assistant_message": "Building response...",
             "dashboard_payload": build_default_dashboard_payload(backend_intent)
-        }
     
-    logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
-    logger.info("[API CONTEXT RAW] %s", json.dumps(enriched_api_context, indent=2, default=str))
+logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
+logger.info("[API CONTEXT RAW] %s", json.dumps(enriched_api_context, indent=2, default=str))
         
 except Exception as first_exc:
     # Retry with stricter prompt for itinerary generation
@@ -1307,7 +1306,8 @@ except Exception as first_exc:
     # FINAL FALLBACK: This should never be reached, but if it is, return a valid response
     selected_model = request.model_variant or getattr(request, "selected_model", "base")
     adapter_loaded = selected_model == "fine_tuned"
-    fallback_response_kwargs = {}
+    fallback_response_kwargs = {
+        }
 
     logger.error("[GTR FINAL FALLBACK] reached end of generate_travel_response without return")
 
