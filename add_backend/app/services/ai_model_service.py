@@ -1645,7 +1645,7 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
         used_apis = []
         missing_apis = ["hotels"]
         warnings = ["Live hotel API unavailable; showing static fallback hotel options."]
-        assistant_message = f"Live hotel data is currently unavailable, but here are sample hotel options in {destination}."
+        assistant_message = f"Here are some hotel options in {destination} for your stay."
         raw_model_output = "Direct hotel response: static fallback hotels shown because live API returned no data"
     
     logger.info("[HOTEL SOURCE] %s", hotel_source)
