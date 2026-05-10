@@ -916,6 +916,194 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
                 trip_summary.get("origin"),
                 trip_summary.get("destination")
             )
+            
+            # Update normalized response with enhanced dashboard
+            normalized["dashboard_payload"] = normalized_dashboard
+        
+        parse_success = True
+        logger.info("[GTR AFTER NORMALIZE]")
+        logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
+        logger.info("[RETURNING MODEL NORMALIZED RESPONSE] parse_success=True fallback_used=False")
+        
+    except Exception as first_exc:
+        # Retry with stricter prompt for itinerary generation
+        if backend_intent == "itinerary_generation":
+            logger.info("[MODEL RETRY ATTEMPT] First attempt failed, retrying with stricter prompt")
+            
+            # Build retry prompt
+            travel_info = enriched_api_context.get("travel_info", {})
+            retry_origin = travel_info.get("origin", "Origin")
+            retry_destination = travel_info.get("destination", "Destination")
+            
+            retry_prompt = (
+                "The previous itinerary was valid JSON but had quality issues.\n"
+                "Return ONLY valid JSON.\n"
+                f"Create exactly {duration_days_int} days.\n"
+                "Each day must have Morning, Afternoon, Evening.\n"
+                "Do not repeat the same activity more than once.\n"
+                "Use varied attractions and experiences for each day.\n"
+                "Do not include weather/flights/hotels/events.\n"
+                "Use this exact schema:\n"
+                '{\n'
+                '  "assistant_message": f"Here is a {duration_days_int}-day budget trip plan from {retry_origin} to {retry_destination}.",\n'
+                '  "dashboard_payload": {\n'
+                f'    "intent": "{backend_intent}",\n'
+                '    "trip_summary": {\n'
+                f'      "origin": "{retry_origin}",\n'
+                f'      "destination": "{retry_destination}",\n'
+                f'      "duration_days": {duration_days_int},\n'
+                '      "budget": 500,\n'
+                '      "currency": "EUR",\n'
+                '      "source": "model_generated"\n'
+                '    },\n'
+                '    "food_recommendations": [...],\n'
+                '    "itinerary": [...]\n'
+                '  }\n'
+                '}\n'
+            )
+            
+            # Generate retry response
+            retry_raw_text = generate_text(tokenizer, model, retry_prompt, config)
+            retry_raw_text = retry_raw_text
+            logger.info("[MODEL RETRY OUTPUT LENGTH] %s", len(retry_raw_text or ""))
+            
+            try:
+                # Parse retry output
+                retry_parsed = parse_model_json_with_repair(retry_raw_text)
+                
+                # Extract dashboard payload
+                if "dashboard_payload" in retry_parsed:
+                    retry_dashboard_payload = retry_parsed["dashboard_payload"]
+                else:
+                    retry_dashboard_payload = retry_parsed
+                
+                # Validate retry itinerary
+                if not itinerary_has_required_days(retry_dashboard_payload, duration_days_int):
+                    raise ValueError("Retry itinerary still missing required days")
+                
+                # Normalize retry output
+                retry_normalized_dashboard = normalize_model_dashboard_payload(retry_dashboard_payload, backend_intent, enriched_api_context)
+                
+                # Build retry response
+                normalized = {
+                    "assistant_message": retry_parsed.get("assistant_message", f"Here is your {backend_intent.replace('_', ' ')} result."),
+                    "dashboard_payload": retry_normalized_dashboard
+                }
+                
+                # Apply API context truth
+                normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
+                
+                # Ensure flights are always present for itinerary generation
+                trip_summary = retry_normalized_dashboard.get("trip_summary") or {}
+                retry_normalized_dashboard = await ensure_flights_for_route(
+                    retry_normalized_dashboard,
+                    enriched_api_context,
+                    trip_summary.get("origin"),
+                    trip_summary.get("destination")
+                )
+                
+                # Update normalized response
+                normalized["dashboard_payload"] = retry_normalized_dashboard
+                
+                parse_success = True
+                retry_used = True
+                logger.info("[MODEL RETRY SUCCESS] parse_success=True retry_used=True")
+                
+            except Exception as retry_exc:
+                logger.error("[MODEL RETRY FAILED] %s", str(retry_exc))
+                raise retry_exc
+        else:
+            # For non-itinerary intents, just raise original exception
+            raise first_exc
+        
+    except Exception as exc:
+        # Log actual validation error for debugging
+        logger.error(f"[AI MODEL VALIDATION ERROR] {str(exc)}")
+        logger.error(f"[RAW MODEL OUTPUT] {raw_text}")
+        logger.error(f"[ENRICHED API CONTEXT] {json.dumps(enriched_api_context, indent=2)}")
+        
+        # Build static fallback based on backend intent
+        normalized = await build_static_fallback_from_context(
+            request=request,
+            backend_intent=backend_intent,
+            api_context=enriched_api_context
+        )
+        
+        parse_success = False
+        fallback_used = True
+        logger.info("[STATIC FALLBACK BUILT] due to model parsing failure")
+
+    parse_success = False
+    fallback_used = False
+    retry_used = False
+    first_raw_text = raw_text
+    retry_raw_text: str | None = None
+
+    normalized = None
+    response_kwargs = {}
+    
+    logger.info("[MODEL JSON REPAIR ATTEMPT]")
+    
+    # Get duration for validation
+    duration_days = enriched_api_context.get("travel_info", {}).get("duration_days", 3)
+    try:
+        duration_days_int = int(duration_days)
+    except Exception:
+        duration_days_int = 3
+    
+    # First parsing attempt
+    try:
+        # Try parsing original first
+        try:
+            parsed = parse_model_json_with_repair(raw_text)
+        except Exception as original_exc:
+            logger.info("[MODEL JSON REPAIR NEEDED] %s", str(original_exc))
+            logger.error("[MODEL JSON REPAIR FAILED] %s", str(original_exc))
+            raise original_exc
+        
+        # Extract dashboard payload if nested
+        if "dashboard_payload" in parsed:
+            dashboard_payload = parsed["dashboard_payload"]
+        else:
+            dashboard_payload = parsed
+        
+        # Validate itinerary has required days and quality for itinerary_generation
+        if backend_intent == "itinerary_generation":
+            if not itinerary_has_required_days(dashboard_payload, duration_days_int):
+                logger.info("[ITINERARY VALIDATION FAILED] Missing required days, triggering retry")
+                raise ValueError("Itinerary missing required days")
+            
+            # Check for excessive repetition
+            if itinerary_has_too_many_repeats(dashboard_payload, max_repeat=1):
+                logger.info("[ITINERARY VALIDATION FAILED] Too many repeated activities, triggering retry")
+                raise ValueError("Itinerary has excessive repetition")
+            
+            # Check for sufficient diversity
+            if not itinerary_has_required_diversity(dashboard_payload, duration_days_int):
+                logger.info("[ITINERARY VALIDATION FAILED] Insufficient activity diversity, triggering retry")
+                raise ValueError("Itinerary lacks sufficient diversity")
+        
+        # Normalize model output to proper schema
+        normalized_dashboard = normalize_model_dashboard_payload(dashboard_payload, backend_intent, enriched_api_context)
+        
+        # Build final normalized response
+        normalized = {
+            "assistant_message": parsed.get("assistant_message", f"Here is your {backend_intent.replace('_', ' ')} result."),
+            "dashboard_payload": normalized_dashboard
+        }
+        
+        # Apply API context truth
+        normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
+        
+        # Ensure flights are always present for itinerary generation
+        if backend_intent == "itinerary_generation":
+            trip_summary = normalized_dashboard.get("trip_summary") or {}
+            normalized_dashboard = await ensure_flights_for_route(
+                normalized_dashboard,
+                enriched_api_context,
+                trip_summary.get("origin"),
+                trip_summary.get("destination")
+            )
             # Update the normalized response with the enhanced dashboard
             normalized["dashboard_payload"] = normalized_dashboard
         
@@ -1041,95 +1229,70 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
     logger.info("[API CONTEXT RAW] %s", json.dumps(enriched_api_context, indent=2, default=str))
-
-    # Add raw model output if requested
-    if request.include_raw_model_output:
-        response_kwargs["raw_model_output"] = raw_text
-
-    # Set assistant_message_source based on model variant
-    assistant_message_source = "mock_model"
-    if not MOCK_MODEL:
-        if request.model_variant == "fine_tuned":
-            assistant_message_source = "fine_tuned_model"
-        elif request.model_variant == "base":
-            assistant_message_source = "base_model"
-        else:
-            assistant_message_source = "model_generated"
-    
-    # Update assistant_message_source in dashboard_payload
-    normalized["dashboard_payload"]["assistant_message_source"] = assistant_message_source
-    
-    # Override model intent with backend intent
-    normalized["dashboard_payload"]["intent"] = backend_intent
-    logger.info("[FINAL INTENT AFTER OVERRIDE] %s", backend_intent)
-    
-    # Merge live API context into dashboard payload
-    normalized["dashboard_payload"] = merge_live_api_context_into_dashboard(
-        normalized["dashboard_payload"],
-        enriched_api_context,
-        backend_intent
-    )
-    
-    logger.info("[MERGED WEATHER] %s", normalized["dashboard_payload"].get("weather"))
-    logger.info("[FINAL USED API] %s", normalized["dashboard_payload"].get("api_grounding", {}).get("used_api"))
-    logger.info("[FINAL INTENT] %s", normalized["dashboard_payload"].get("intent"))
-    
-    # Update dashboard actions based on available API data for itinerary_generation
-    if backend_intent == "itinerary_generation":
-        normalized["dashboard_payload"] = update_dashboard_actions_for_available_sections(
-            normalized["dashboard_payload"]
-        )
-    
-    # Update assistant_message based on backend intent
-    if backend_intent == "weather_query":
-        # Extract location from message or use default
-        location = "requested location"
-        if "stuttgart" in request.message.lower():
-            location = "Stuttgart"
-        elif "heidelberg" in request.message.lower():
-            location = "Heidelberg"
-        elif "berlin" in request.message.lower():
-            location = "Berlin"
-        elif "munich" in request.message.lower():
-            location = "Munich"
         
-        normalized["assistant_message"] = f"Here is current weather information for {location}."
-    elif backend_intent == "itinerary_generation":
-        # Extract travel info
+except Exception as first_exc:
+    # Retry with stricter prompt for itinerary generation
+    if backend_intent == "itinerary_generation":
+        logger.info("[MODEL RETRY ATTEMPT] First attempt failed, retrying with stricter prompt")
+            
+        # Build retry prompt
         travel_info = enriched_api_context.get("travel_info", {})
-        origin = travel_info.get("origin", "Stuttgart")
-        destination = travel_info.get("destination", "Heidelberg")
-        duration = travel_info.get("duration_days",3)
-        
-        normalized["assistant_message"] = f"Here is a {duration}-day budget trip plan from {origin} to {destination}."
-    elif backend_intent == "flight_search":
-        normalized["assistant_message"] = "Here are available flight options for your requested route."
-    elif backend_intent == "hotel_search":
-        normalized["assistant_message"] = "Here are available hotel options for your requested destination."
-    elif backend_intent == "events_search":
-        normalized["assistant_message"] = "Here are available events and activities for your requested location."
-    
-    # Final intent-based response cleanup using backend intent
-    normalized["dashboard_payload"] = enforce_intent_specific_dashboard(normalized["dashboard_payload"])
-    
-    # Apply budget calculation for itinerary_generation
-    if backend_intent == "itinerary_generation":
-        normalized["dashboard_payload"]["budget_breakdown"] = calculate_budget_breakdown(
-            normalized["dashboard_payload"]
+        retry_origin = travel_info.get("origin", "Origin")
+        retry_destination = travel_info.get("destination", "Destination")
+            
+        retry_prompt = (
+            "The previous itinerary was valid JSON but had quality issues.\n"
+            "Return ONLY valid JSON.\n"
+            f"Create exactly {duration_days_int} days.\n"
+            "Each day must have Morning, Afternoon, Evening.\n"
+            "Do not repeat the same activity more than once.\n"
+            "Use varied attractions and experiences for each day.\n"
+            "Do not include weather/flights/hotels/events.\n"
+            "Use this exact schema:\n"
+            '{\n'
+            '  "assistant_message": f"Here is a {duration_days_int}-day budget trip plan from {retry_origin} to {retry_destination}.",\n'
+            '  "dashboard_payload": {\n'
+            f'    "intent": "{backend_intent}",\n'
+            '    "trip_summary": {\n'
+            f'      "origin": "{retry_origin}",\n'
+            f'      "destination": "{retry_destination}",\n'
+            f'      "duration_days": {duration_days_int},\n'
+            '      "budget": 500,\n'
+            '      "currency": "EUR",\n'
+            '      "source": "model_generated"\n'
+            '    },\n'
+            '    "food_recommendations": [...],\n'
+            '    "itinerary": [...]\n'
+            '  }\n'
+            '}\n'
         )
-        
-        # Add itinerary_source tracking
-        if retry_used:
-            normalized["dashboard_payload"]["itinerary_source"] = "model_generated_retry"
-        elif parse_success:
-            normalized["dashboard_payload"]["itinerary_source"] = "model_generated"
-        else:
-            normalized["dashboard_payload"]["itinerary_source"] = "model_failed"
-    
-    logger.info("[GTR AFTER SANITIZE]")
-
-    logger.info("[GTR RETURN] returning ChatResponse")
-    return ChatResponse(
+            
+        # Generate retry response
+        retry_raw_text = generate_text(tokenizer, model, retry_prompt, config)
+        retry_raw_text = retry_raw_text
+        logger.info("[MODEL RETRY OUTPUT LENGTH] %s", len(retry_raw_text or ""))
+            
+        try:
+            # Parse retry output
+            retry_parsed = parse_model_json_with_repair(retry_raw_text)
+                
+            # Extract dashboard payload
+            if "dashboard_payload" in retry_parsed:
+                retry_dashboard_payload = retry_parsed["dashboard_payload"]
+            else:
+                retry_dashboard_payload = retry_parsed
+                
+            # Validate retry itinerary
+            if not itinerary_has_required_days(retry_dashboard_payload, duration_days_int):
+                raise ValueError("Retry itinerary still missing required days")
+                
+            # Normalize retry output
+            retry_normalized_dashboard = normalize_model_dashboard_payload(retry_dashboard_payload, backend_intent, enriched_api_context)
+                
+            # Build retry response
+            normalized = {
+                "assistant_message": retry_parsed.get("assistant_message", f"Here is your {backend_intent.replace('_', ' ')} result."),
+                "dashboard_payload": retry_normalized_dashboard
         session_id=request.session_id,
         selected_model=request.model_variant,
         adapter_loaded=request.model_variant == "fine_tuned",
@@ -1181,6 +1344,33 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         },
         **fallback_response_kwargs,
     )
+
+
+def safe_json_loads_from_model(raw_text: str):
+    """Safely parse JSON from model output, preserving raw text for debugging"""
+    if not raw_text or not str(raw_text).strip():
+        raise ValueError("empty_model_output")
+
+    text = str(raw_text).strip()
+
+    # remove markdown fences
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    # If output has text before JSON, trim to first {
+    first = text.find("{")
+    last = text.rfind("}")
+    if first == -1 or last == -1 or last <= first:
+        raise ValueError("no_json_object_found")
+
+    text = text[first:last + 1]
+
+    # repair common trailing commas
+    text = text.replace(",}", "}").replace(",]", "]")
+
+    try:
+        return json.loads(text)
+    except Exception as exc:
+        raise ValueError(f"json_parse_failed: {str(exc)}")
 
 
 def parse_model_json_with_repair(raw_text: str) -> dict:
@@ -1283,25 +1473,25 @@ def extract_live_section(api_context: dict, section: str):
             if isinstance(dashboard[section], dict) and "data" in dashboard[section]:
                 return dashboard[section]["data"]
             return dashboard[section]
-    
+
     # Nested api_context
     if "api_context" in api_context:
         nested = api_context["api_context"]
         if section in nested:
             return nested[section]
-    
+
     # Nested data
     if "data" in api_context:
         data = api_context["data"]
         if isinstance(data, dict) and section in data:
             return data[section]
-    
+
     # Special case for events/local_events
     if section == "events":
         for key in ["local_events", "events_data"]:
             if key in api_context:
                 return api_context[key]
-    
+
     return None
 
 
@@ -1309,23 +1499,23 @@ async def _build_direct_weather_response(request: ChatRequest, enriched_api_cont
     """Build direct weather response bypassing model"""
     logger.info("[BUILD DIRECT WEATHER RESPONSE] Building deterministic weather response")
     logger.info("[DIRECT WEATHER API CONTEXT] %s", json.dumps(enriched_api_context, indent=2, default=str))
-    
+
     # Extract location robustly
     location = "requested location"
-    
+
     # Try travel_info first
     travel_info = enriched_api_context.get("travel_info", {})
     if "destination" in travel_info:
         location = travel_info["destination"]
     elif "location" in travel_info:
         location = travel_info["location"]
-    
+
     # Parse from message "in [city]"
     if " in " in request.message.lower():
         after_in = request.message.lower().split(" in ", 1)[1].strip()
         if after_in:
             location = after_in.split()[0].title()
-    
+
     # Check for specific cities in message
     if "stuttgart" in request.message.lower():
         location = "Stuttgart"
@@ -1335,12 +1525,12 @@ async def _build_direct_weather_response(request: ChatRequest, enriched_api_cont
         location = "Berlin"
     elif "munich" in request.message.lower():
         location = "Munich"
-    
+
     logger.info("[DIRECT WEATHER CITY] %s", location)
-    
+
     # Extract weather data using robust extractor
     weather_data = extract_live_section(enriched_api_context, "weather")
-    
+
     # If no weather data, fetch it directly
     if not weather_data:
         try:
@@ -1351,19 +1541,19 @@ async def _build_direct_weather_response(request: ChatRequest, enriched_api_cont
         except Exception as e:
             logger.error("[DIRECT WEATHER FETCH ERROR] %s", str(e))
             weather_data = None
-    
+
     weather_status = "available" if weather_data else "unavailable"
     logger.info("[DIRECT WEATHER DATA] %s", weather_data)
-    
+
     # Build response kwargs
     response_kwargs = {}
     if request.include_raw_model_output:
         response_kwargs["raw_model_output"] = "Direct weather response (no model generation)"
-    
+
     # Build used_apis and warnings
     used_apis = ["weather"] if weather_data else []
     warnings = [] if weather_data else [f"Weather API returned no data for {location}"]
-    
+
     return ChatResponse(
         session_id=request.session_id,
         selected_model=request.model_variant,
