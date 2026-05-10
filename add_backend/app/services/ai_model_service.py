@@ -238,6 +238,39 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
         parse_success = True
     except Exception as exc:
+        # Log the actual validation error for debugging
+        logger.error(f"[AI MODEL VALIDATION ERROR] {str(exc)}")
+        logger.error(f"[RAW MODEL OUTPUT] {raw_text}")
+        logger.error(f"[ENRICHED API CONTEXT] {json.dumps(enriched_api_context, indent=2)}")
+        
+        # Try to validate with Pydantic to get specific error details
+        try:
+            from pydantic import ValidationError
+            # Create a temporary dashboard payload model to validate
+            temp_payload = normalized.get("dashboard_payload", {})
+            validated = ModelDashboardResponse.model_validate(temp_payload)
+            logger.info(f"[PYDANTIC VALIDATION SUCCESS] Payload validated successfully")
+            parse_success = True
+            fallback_used = False
+        except ValidationError as validation_exc:
+            logger.error(f"[PYDANTIC VALIDATION ERROR] {json.dumps(validation_exc.errors(), indent=2)}")
+            logger.error(f"[INVALID PAYLOAD] {json.dumps(temp_payload, indent=2, default=str)}")
+            
+            # Build error response with actual validation details
+            parse_success = False
+            fallback_used = True
+            
+            # Extract specific field errors from validation
+            error_details = []
+            if hasattr(validation_exc, 'errors') and validation_exc.errors:
+                for error in validation_exc.errors:
+                    field_path = " -> ".join(str(loc) for loc in error.get('loc', []))
+                    error_msg = f"Field '{error.get('type', 'unknown')}' at {field_path}: {error.get('msg', 'Unknown error')}"
+                    error_details.append(error_msg)
+            
+            error_message = f"Response validation failed: {'; '.join(error_details) if error_details else 'Unknown validation error'}"
+            
+            normalized = build_safe_fallback_response(error_message)
         err_str = str(exc)
         if any(marker in err_str for marker in _INCOMPLETE_JSON_ERRORS):
             logger.warning("First generation incomplete (%s), retrying with compact prompt", exc)
