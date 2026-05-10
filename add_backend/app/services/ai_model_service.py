@@ -554,6 +554,7 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     retry_raw_text: str | None = None
 
     normalized = None
+    response_kwargs = {}
     try:
         normalized = safe_parse_and_normalize(raw_text, enriched_api_context, request.message)
         normalized = enforce_api_context_truth(normalized, enriched_api_context, request.message)
@@ -586,6 +587,10 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
     
     logger.info("[NORMALIZED EXISTS] %s", normalized is not None)
     logger.info("[API CONTEXT RAW] %s", json.dumps(enriched_api_context, indent=2, default=str))
+
+    # Add raw model output if requested
+    if request.include_raw_model_output:
+        response_kwargs["raw_model_output"] = raw_text
 
     # Set assistant_message_source based on model variant
     assistant_message_source = "mock_model"
@@ -659,12 +664,13 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         retry_used=retry_used,
         assistant_message=normalized["assistant_message"],
         dashboard_payload=normalized["dashboard_payload"],
-        **raw_kwargs,
+        **response_kwargs,
     )
 
     # FINAL FALLBACK: This should never be reached, but if it is, return a valid response
     selected_model = request.model_variant or getattr(request, "selected_model", "base")
     adapter_loaded = selected_model == "fine_tuned"
+    fallback_response_kwargs = {}
 
     logger.error("[GTR FINAL FALLBACK] reached end of generate_travel_response without return")
 
@@ -698,7 +704,8 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
                 "missing_api": [],
                 "warnings": ["generate_travel_response reached final fallback"]
             }
-        }
+        },
+        **fallback_response_kwargs,
     )
 
 
