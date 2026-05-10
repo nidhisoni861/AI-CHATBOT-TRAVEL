@@ -118,6 +118,9 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
     # Detect intent from message
     message_lower = request.message.lower()
     
+    # Itinerary keywords (highest priority)
+    itinerary_keywords = ["plan", "itinerary", "trip", "day", "days", "budget trip", "travel plan", "schedule", "route", "vacation", "weekend trip"]
+    
     # Weather intent detection
     weather_keywords = ["weather", "temperature", "rain", "sunny", "cloudy", "forecast"]
     if any(keyword in message_lower for keyword in weather_keywords):
@@ -159,9 +162,54 @@ def _build_intent_aware_mock_response(request: ChatRequest, api_context: dict[st
             }
         )
     
-    # Flight intent detection
-    flight_keywords = ["flight", "fly", "airplane", "airport", "from", "to", "berlin", "munich"]
-    if any(keyword in message_lower for keyword in flight_keywords):
+    # Itinerary intent detection (highest priority)
+    if any(keyword in message_lower for keyword in itinerary_keywords):
+        return ChatResponse(
+            session_id=request.session_id,
+            selected_model=request.model_variant,
+            adapter_loaded=False,  # Always false in mock mode
+            parse_success=True,
+            fallback_used=False,
+            retry_used=False,
+            assistant_message="Here is your travel itinerary for the requested trip.",
+            dashboard_payload={
+                "schema_version": "travel_dashboard_v1",
+                "intent": "itinerary_generation",
+                "trip_summary": {
+                    "destination": "Heidelberg",
+                    "duration_days": 3,
+                    "travelers": "solo",
+                    "budget": "budget",
+                    "origin": "Stuttgart",
+                    "currency": "EUR",
+                    "source": "backend_extraction"
+                },
+                "weather": {"data": None, "source": "mock_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "mock_api", "status": "unavailable"},
+                "food_recommendations": [
+                    {"name": "Local Restaurant", "price_range": "moderate"},
+                    {"name": "Traditional Café", "price_range": "low"}
+                ],
+                "itinerary": [
+                    {"day": 1, "time": "Morning", "activity": "Arrival in Heidelberg", "budget_eur": 50},
+                    {"day": 1, "time": "Afternoon", "activity": "City exploration", "budget_eur": 25}
+                ],
+                "budget_breakdown": {"currency": "EUR", "transport": 100, "food": 150, "activities": 75, "total": 325},
+                "dashboard_actions": ["show_trip_summary", "show_itinerary", "show_budget"],
+                "assistant_message_source": "mock_model",
+                "api_grounding": {
+                    "used_api": [],
+                    "missing_api": ["weather", "flights", "hotels", "events"],
+                    "warnings": []
+                }
+            }
+        )
+    
+    # Flight intent detection (lower priority - explicit flight words only)
+    flight_keywords = ["flight", "fly", "airplane", "airport", "airfare", "ticket", "plane"]
+    if any(keyword in message_lower for keyword in flight_keywords) and not any(keyword in message_lower for keyword in itinerary_keywords):
         return ChatResponse(
             session_id=request.session_id,
             selected_model=request.model_variant,

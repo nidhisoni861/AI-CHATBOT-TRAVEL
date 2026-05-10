@@ -173,10 +173,16 @@ class ApiContextService:
             "events": False
         }
         
-        # Flight keywords
+        # Itinerary keywords (highest priority)
+        itinerary_keywords = [
+            "plan", "itinerary", "trip", "day", "days", "budget trip", "travel plan", 
+            "schedule", "route", "vacation", "weekend trip"
+        ]
+        
+        # Flight keywords (lower priority - explicit flight words only)
         flight_keywords = [
             "flight", "fly", "flying", "airline", "airport", "depart", "arrival", 
-            "ticket", "booking", "trip", "travel", "journey", "from", "to"
+            "ticket", "booking", "airfare", "plane"
         ]
         
         # Hotel keywords  
@@ -197,22 +203,24 @@ class ApiContextService:
             "festival", "show", "entertainment", "tour", "sightseeing"
         ]
         
-        # Detect intents with priority order
+        # Detect intents with priority order (itinerary first!)
+        itinerary_detected = any(keyword in message_lower for keyword in itinerary_keywords)
         weather_detected = any(keyword in message_lower for keyword in weather_keywords)
         flight_detected = any(keyword in message_lower for keyword in flight_keywords)
         hotel_detected = any(keyword in message_lower for keyword in hotel_keywords)
         events_detected = any(keyword in message_lower for keyword in events_keywords)
         
-        # Set intents
-        intent["weather"] = weather_detected
-        intent["hotels"] = hotel_detected
-        intent["events"] = events_detected
-        
-        # Only set flights intent if explicitly requested AND no other higher priority intent detected
-        if flight_detected and not weather_detected and not hotel_detected and not events_detected:
+        # Priority: itinerary > weather > flight > hotel > events
+        if itinerary_detected:
+            intent["itinerary_generation"] = True
+        if weather_detected:
+            intent["weather"] = True
+        if flight_detected and not itinerary_detected:  # Only flight if not itinerary
             intent["flights"] = True
-        else:
-            intent["flights"] = False
+        if hotel_detected:
+            intent["hotels"] = True
+        if events_detected:
+            intent["events"] = True
         
         # Only set hotels intent if explicitly requested AND no other higher priority intent detected
         if hotel_detected and not weather_detected and not flight_detected and not events_detected:
