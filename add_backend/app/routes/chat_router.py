@@ -46,13 +46,13 @@ async def chat_post(chat_request: ChatRequest) -> ChatResponse:
             dashboard_payload={
                 "schema_version": "travel_dashboard_v1",
                 "intent": "error",
-                "weather": {"status": "unavailable"},
-                "flights": {"status": "unavailable"},
-                "hotels": {"status": "unavailable"},
-                "local_events": {"status": "unavailable"},
+                "weather": {"data": None, "source": "live_api", "status": "unavailable"},
+                "flights": {"data": [], "source": "live_api", "status": "unavailable"},
+                "hotels": {"data": [], "source": "live_api", "status": "unavailable"},
+                "local_events": {"data": [], "source": "live_api", "status": "unavailable"},
                 "food_recommendations": [],
                 "itinerary": [],
-                "budget_breakdown": None,
+                "budget_breakdown": {"currency": "EUR", "transport": None, "intercity_transport": None, "total_known_cost": 0, "note": None},
                 "dashboard_actions": ["show_error"],
                 "api_grounding": {
                     "used_api": [],
