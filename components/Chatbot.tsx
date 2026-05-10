@@ -109,7 +109,9 @@ export default function ChatBotPanel() {
 
       <ChatMessages messages={messages} loading={loading} />
 
-      <SuggestionChips onSelect={sendMessage} disabled={loading} />
+      {messages.length === 1 && messages[0].id === "init" && (
+        <SuggestionChips onSelect={sendMessage} disabled={loading} />
+      )}
 
       <ChatInput
         input={input}
