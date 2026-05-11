@@ -107,6 +107,40 @@ def safe_max_new_tokens(value: int | None, message: str = "") -> int:
     return max(MIN_MAX_NEW_TOKENS, min(value, MAX_ALLOWED_NEW_TOKENS))
 
 
+def parse_price_number(price_str: str, default: int = 0) -> int:
+    """Extract the first number from a price string like '$250-350' -> 250."""
+    if not price_str:
+        return default
+    
+    import re
+    match = re.search(r'\d+', str(price_str))
+    if match:
+        return int(match.group())
+    return default
+
+
+def get_cheapest_flight_price_from_payload(payload: dict) -> int:
+    flights_section = payload.get("flights") or {}
+    flights_data = flights_section.get("data") or []
+
+    prices = []
+
+    for flight in flights_data:
+        price_value = None
+
+        if isinstance(flight, dict):
+            price_value = flight.get("price")
+        else:
+            price_value = getattr(flight, "price", None)
+
+        price_number = parse_price_number(price_value, 0)
+
+        if price_number > 0:
+            prices.append(price_number)
+
+    return min(prices) if prices else 0
+
+
 def preload_model(model_variant: ModelVariant = "fine_tuned") -> None:
     config = AdapterConfig.from_env()
     logger.info("Preloading model variant=%s", model_variant)
@@ -1070,6 +1104,29 @@ async def generate_travel_response(request: ChatRequest) -> ChatResponse:
         fallback_used,
         retry_used
     )
+
+    # Final safety patch: Ensure transport budget is calculated from final flights data
+    dashboard_payload = normalized["dashboard_payload"]
+    transport_cost = get_cheapest_flight_price_from_payload(dashboard_payload)
+
+    if transport_cost > 0:
+        budget = dashboard_payload.get("budget_breakdown") or {}
+
+        old_transport = int(budget.get("transport") or 0)
+
+        if old_transport != transport_cost:
+            difference = transport_cost - old_transport
+
+            budget["transport"] = transport_cost
+            budget["intercity_transport"] = transport_cost
+            budget["total_known_cost"] = int(budget.get("total_known_cost") or 0) + difference
+            budget["total"] = int(budget.get("total") or 0) + difference
+            budget["remaining_budget"] = int(budget.get("remaining_budget") or 0) - difference
+            budget["within_budget"] = budget["remaining_budget"] >= 0
+
+            dashboard_payload["budget_breakdown"] = budget
+
+    logger.info("[ITINERARY FINAL FLIGHT TRANSPORT] %s", transport_cost)
 
     return ChatResponse(
         session_id=request.session_id,

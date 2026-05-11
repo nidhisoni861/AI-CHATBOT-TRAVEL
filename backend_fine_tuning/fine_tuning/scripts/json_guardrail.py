@@ -1100,6 +1100,39 @@ def _parse_eur_amount(value: Any) -> Optional[float]:
     return None
 
 
+def _parse_price_number(price_str: str, default: int = 0) -> int:
+    """Extract the first number from a price string like '$250-350' -> 250."""
+    if not price_str:
+        return default
+    
+    match = re.search(r'\d+', str(price_str))
+    if match:
+        return int(match.group())
+    return default
+
+
+def _get_cheapest_flight_price_from_payload(payload: dict) -> int:
+    flights_section = payload.get("flights") or {}
+    flights_data = flights_section.get("data") or []
+
+    prices = []
+
+    for flight in flights_data:
+        price_value = None
+
+        if isinstance(flight, dict):
+            price_value = flight.get("price")
+        else:
+            price_value = getattr(flight, "price", None)
+
+        price_number = _parse_price_number(price_value, 0)
+
+        if price_number > 0:
+            prices.append(price_number)
+
+    return min(prices) if prices else 0
+
+
 # ── Sanitization functions ────────────────────────────────────────────────────
 
 def _normalize_price_range(value: Any) -> str:
@@ -1353,8 +1386,19 @@ def _sanitize_budget_breakdown(
     ag = dashboard_payload.setdefault("api_grounding", {"used_api": [], "missing_api": [], "warnings": []})
     new_warnings: List[str] = []
 
-    # Rule 6: no transport API → null transport
-    if not has_transport:
+    # Rule 6: Extract transport cost from flights data when available
+    if has_transport:
+        # Extract cheapest flight price from payload
+        transport_cost = _get_cheapest_flight_price_from_payload(dashboard_payload)
+        if transport_cost > 0:
+            bb["transport"] = transport_cost
+            bb["intercity_transport"] = transport_cost
+        else:
+            bb["transport"] = None
+            bb["intercity_transport"] = None
+            if not any(_NO_TRANSPORT_API_NOTE in w for w in ag.get("warnings", [])):
+                new_warnings.append(_NO_TRANSPORT_API_NOTE)
+    else:
         bb["transport"] = None
         bb["intercity_transport"] = None
         if not any(_NO_TRANSPORT_API_NOTE in w for w in ag.get("warnings", [])):
@@ -1396,22 +1440,31 @@ def _sanitize_budget_breakdown(
         if amt is not None and amt >= 0:
             known_total += amt
 
-    null_keys = {k for k in ("transport", "accommodation", "intercity_transport") if bb.get(k) is None}
+    # Add transport cost if available
+    transport_cost = bb.get("transport")
+    if transport_cost is not None and isinstance(transport_cost, (int, float)) and transport_cost > 0:
+        known_total += float(transport_cost)
+
+    null_keys = {k for k in ("accommodation",) if bb.get(k) is None}
     if null_keys:
         bb.pop("total", None)
+        bb["total_known_cost"] = round(known_total)
+    else:
+        bb["total"] = round(known_total)
         bb["total_known_cost"] = round(known_total)
 
         budget_raw = ts.get("budget") if isinstance(ts, dict) else None
         budget = _parse_eur_amount(budget_raw)
         if budget is not None and budget > 0:
-            # When accommodation cost is known, only transport remains unknown
-            remaining_key = (
-                "remaining_budget_before_transport"
-                if accommodation_known
-                else "remaining_budget_before_transport_and_accommodation"
-            )
-            bb[remaining_key] = round(max(0.0, budget - known_total))
-            bb["within_budget"] = True
+            # Calculate remaining budget
+            bb["remaining_budget"] = round(max(0.0, budget - known_total))
+            bb["within_budget"] = budget >= known_total
+            
+            # Legacy keys for compatibility
+            if not accommodation_known:
+                bb["remaining_budget_before_transport_and_accommodation"] = bb["remaining_budget"]
+            else:
+                bb["remaining_budget_before_transport"] = bb["remaining_budget"]
 
         missing_parts: List[str] = []
         if not has_transport:
