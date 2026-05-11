@@ -2234,7 +2234,7 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
         # Create static fallback hotels
         fallback_hotels = [
             {
-                "name": "Generator Berlin",
+                "name": "Hotel Europa",
                 "location": destination,
                 "price_per_night": "€25",
                 "rating": 4.4
@@ -2246,7 +2246,7 @@ async def _build_direct_hotel_response(request: ChatRequest, enriched_api_contex
                 "rating": 4.3
             },
             {
-                "name": "Hotel Berlin Central",
+                "name": "Marriott International",
                 "location": destination,
                 "price_per_night": "€35",
                 "rating": 4.4
