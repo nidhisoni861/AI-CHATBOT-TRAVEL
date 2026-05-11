@@ -197,24 +197,60 @@ def build_static_fallback_flights(origin: str, destination: str, departure_date:
     ]
 
 
+def is_unknown_city(value) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip().lower()
+    return text in ["", "unknown", "none", "null"]
+
+
+def city_matches(a, b) -> bool:
+    if is_unknown_city(a) or is_unknown_city(b):
+        return False
+    return str(a).strip().lower() == str(b).strip().lower()
+
+
+def flights_match_route(flights, origin, destination) -> bool:
+    if not isinstance(flights, list) or not flights:
+        return False
+
+    for flight in flights:
+        if isinstance(flight, dict):
+            f_origin = flight.get("origin")
+            f_dest = flight.get("destination")
+        else:
+            f_origin = getattr(flight, "origin", None)
+            f_dest = getattr(flight, "destination", None)
+
+        if not city_matches(f_origin, origin):
+            return False
+
+        if not city_matches(f_dest, destination):
+            return False
+
+    return True
+
+
 async def ensure_flights_for_route(payload: dict, api_context: dict, origin: Optional[str], destination: Optional[str]) -> dict:
     """Ensure flights are always present for valid origin/destination routes."""
     if not payload:
         payload = {}
 
-    if not origin:
-        origin = (
-            payload.get("trip_summary", {}).get("origin")
-            or api_context.get("travel_info", {}).get("origin")
-        )
+    trip_summary = payload.get("trip_summary") or {}
 
-    if not destination:
-        destination = (
-            payload.get("trip_summary", {}).get("destination")
-            or api_context.get("travel_info", {}).get("destination")
-        )
+    origin = (
+        trip_summary.get("origin")
+        or origin
+        or api_context.get("travel_info", {}).get("origin")
+    )
 
-    if not origin or not destination or destination in ["Unknown", "unknown", None, ""]:
+    destination = (
+        trip_summary.get("destination")
+        or destination
+        or api_context.get("travel_info", {}).get("destination")
+    )
+
+    if not origin or not destination or is_unknown_city(destination):
         payload["flights"] = {
             "data": [],
             "source": "live_api",
@@ -229,12 +265,15 @@ async def ensure_flights_for_route(payload: dict, api_context: dict, origin: Opt
 
     flights_list = []
 
-    # 1. Prefer api_context flights if already available
+    # 1. Prefer api_context flights if they match the route
     existing_flights = api_context.get("flights")
-    if isinstance(existing_flights, list) and existing_flights:
+
+    if flights_match_route(existing_flights, origin, destination):
         flights_list = existing_flights
         flight_source = api_context.get("flight_source", "live_api")
     else:
+        flights_list = []
+        flight_source = "static_fallback"
         # 2. Try live FlightService
         try:
             from add_backend.app.services.flight_service import FlightService
